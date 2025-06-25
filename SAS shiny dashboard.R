@@ -14,7 +14,6 @@ library(tidyverse)
 library(here)
 library(shiny)
 library(sf)
-library(tmap)
 library(leaflet)
 library(rnaturalearth)
 library(xlsx)
@@ -31,22 +30,101 @@ sewage_events_data <-
     here::here("Data", "Sewage events 2025.csv")
   ) 
 
-#### First visualisation ####
 
-## prep the data
+
+#### Prep the data ####
 sewage_processed_data <- sewage_events_data %>% 
   filter(!if_all(everything(), ~ is.na(.) | . == "")) %>% 
   filter(!is.na(Longitude), !(Longitude == 0 & Latitude == 0)) %>% 
   # mutate(across(c(Asset.ID, Event.Type), as.factor)) %>% 
   rename(lng = Longitude, lat = Latitude) %>% 
-  mutate(across(c(Start.Date, End.Date), ~as.Date(.x, format = "%d/%m/%Y"))) 
+  mutate(Start.DT = as.POSIXct(paste(Start.Date, Start.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
+         End.DT = as.POSIXct(paste(End.Date, End.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
+         across(c(Start.Date, End.Date), ~as.Date(.x, format = "%d/%m/%Y"))) 
 
 SWW_data <- sewage_processed_data %>% 
-  filter(Asset.ID == "South West")
+  filter(Asset.ID == "South West") %>% 
+  filter(!is.na(End.DT), !is.na(Start.DT)) 
 
 SWW_tags <- SWW_data %>% 
   select(lng, lat, Water.Company, Asset.ID) %>% 
   distinct()
+
+SWW_min_dt <- min(SWW_data$Start.DT, na.rm = TRUE)
+SWW_max_dt <- max(SWW_data$End.DT, na.rm = TRUE)
+
+SWW_base <- expand.grid(Start.DT = SWW_min_dt,
+                        End.DT = SWW_max_dt,
+                        Water.Company = unique(SWW_data$Water.Company)) 
+
+generate_full_status <- function(df_site) {
+  # Ensure proper ordering
+  df_site <- df_site %>% arrange(Start.DT)
+  
+  # Create "off" intervals in gaps between end[i] and start[i+1]
+  off_intervals <- df_site %>%
+    mutate(next_start = lead(Start.DT)) %>%
+    filter(!is.na(next_start) & End.DT < next_start) %>%
+    transmute(
+      # Water.Company = first(Water.Company),
+      Start.DT = End.DT,
+      End.DT = next_start,
+      Event.Type = "none"
+    )
+  
+  # Combine original and "off" intervals
+  bind_rows(df_site, off_intervals) %>%
+    arrange(Start.DT)
+}
+
+
+
+# SWW_processed <- SWW_data %>% 
+#   filter(!is.na(End.DT), !is.na(Start.DT)) %>% 
+#   mutate(Duration.DT = End.DT - Start.DT) 
+
+# SWW_off <- SWW_data %>%
+#   group_by(Water.Company) %>% 
+#   arrange(Start.DT) %>%
+#   mutate(next_start = lead(Start.DT)) %>%
+#   filter(!is.na(next_start)) %>%
+#   filter(End.DT < next_start) %>%
+#   transmute(
+#     Start.DT = End.DT,
+#     End.DT = next_start,
+#     Event.Type = "none"
+#   )
+
+SWW_processed <- SWW_data %>%
+  group_by(Water.Company) %>%
+  group_modify(~ generate_full_status(.x)) %>%
+  ungroup()
+
+# Combine all intervals
+all_intervals <- bind_rows(intervals, off_intervals) %>%
+  arrange(start)
+
+SWW_processed %>%
+  mutate(Status = factor(Event.Type, 
+                         levels = c("spill", "maintenance", "none"),
+                         labels = c("Spill", "Maintenance", "None"),
+                         ordered = TRUE)) %>% 
+  filter(Water.Company == "SWW0853") %>%
+  ggplot(aes(y = 0, col = Status)) +
+  geom_segment(aes(x = Start.DT, xend = End.DT), size = 6, alpha = 0.7) +
+  ylim(c(-1,1)) +
+  labs(x = "Time", y = "Category") +
+  theme_void() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        aspect.ratio = 0.3) +
+  scale_colour_manual(
+    values = c("#cf121d", "#585c62", "#1d9b7e"),
+    drop = FALSE
+  )
+
+  
 
 # discarded idea to have date slider displaying status by day because it's data intensive
 # easier, cheaper, more readable to display a hist or some other data summary
@@ -59,7 +137,7 @@ SWW_tags <- SWW_data %>%
   
 # pal <- colorFactor(palette = "Set1", domain = SWW_data$Water.Company)
 
-## make the map 
+#### make the map ####
 # Chose Positron for now, but ideally would use one which has blue sea
 # E.g. MapTiler Basic, but that requires API and limited usage
 
@@ -96,14 +174,37 @@ server <- function(input, output, session) {
   # render a histogram
   output$barplot <- renderPlot({
     req(clicked_site())  # Only run if a marker was clicked
-    bar_dat <- SWW_data %>% filter(Water.Company == clicked_site())
-    print(bar_dat)
     
-    ggplot(bar_dat, aes(x = Event.Type)) +
-      geom_bar() 
+    SWW_spills <- SWW_processed %>% 
+      filter(Water.Company == clicked_site()) %>%
+      filter(Event.Type == "spill")
+    
+    SWW_filtered <- SWW_processed %>% 
+      filter(Water.Company == clicked_site()) %>%
+      mutate(Status = factor(Event.Type, 
+                             levels = c("spill", "maintenance", "none"),
+                             labels = c("Spill", "Offline", "None"),
+                             ordered = TRUE))
+    ggplot() +
+      geom_point(data = SWW_spills, aes(y = 0.5, x = Start.DT), size = 3, shape = 6, color = "#cf121d") +
+      geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), size = 6, show.legend = TRUE) +
+      ylim(c(-1,1)) +
+      labs(x = "Time", y = "Category") +
+      theme_void() +
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_blank(),
+            legend.position = "top",
+            aspect.ratio = 0.3) +
+      scale_colour_manual(
+        values = c("#cf121d", "#585c62", "#1d9b7e"),
+        drop = FALSE
+      )
+
   })
   
 }
 
+
 shinyApp(ui, server)
+
 
