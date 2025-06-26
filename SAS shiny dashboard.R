@@ -15,6 +15,7 @@ library(here)
 library(shiny)
 library(sf)
 library(leaflet)
+library(tmap)
 library(rnaturalearth)
 library(xlsx)
 
@@ -30,7 +31,10 @@ sewage_events_data <-
     here::here("Data", "Sewage events 2025.csv")
   ) 
 
+constituencies <- sf::read_sf(dsn = here::here("Data", "Constituencies_July_2024")) %>% 
+  st_transform(shape, crs = 4326)
 
+# tm_shape(constituencies) + tm_polygons()
 
 #### Prep the data ####
 sewage_processed_data <- sewage_events_data %>% 
@@ -52,18 +56,21 @@ SWW_tags <- SWW_data %>%
 
 SWW_min_dt <- min(SWW_data$Start.DT, na.rm = TRUE)
 SWW_max_dt <- max(SWW_data$End.DT, na.rm = TRUE)
+SWW_med_dt <- median(SWW_min_dt, SWW_max_dt)
 
-SWW_base <- expand.grid(Start.DT = SWW_min_dt,
-                        End.DT = SWW_max_dt,
-                        Water.Company = unique(SWW_data$Water.Company)) 
+# SWW_base <- expand.grid(Start.DT = SWW_min_dt,
+#                         End.DT = SWW_max_dt,
+#                         Water.Company = unique(SWW_data$Water.Company)) 
 
-generate_full_status <- function(df_site) {
+generate_full_status <- function(df_site, min.DT, max.DT) {
   # Ensure proper ordering
   df_site <- df_site %>% arrange(Start.DT)
   
   # Create "off" intervals in gaps between end[i] and start[i+1]
   off_intervals <- df_site %>%
-    mutate(next_start = lead(Start.DT)) %>%
+    mutate(next_start = lead(Start.DT)) %>% 
+    mutate(next_start = case_when(is.na(next_start) & End.DT != max.DT ~ max.DT,
+                                  TRUE ~ next_start)) %>% 
     filter(!is.na(next_start) & End.DT < next_start) %>%
     transmute(
       # Water.Company = first(Water.Company),
@@ -72,38 +79,33 @@ generate_full_status <- function(df_site) {
       Event.Type = "none"
     )
   
+  # off_intervals <- off_intervals %>% 
+  #   filter()
+  
   # Combine original and "off" intervals
-  bind_rows(df_site, off_intervals) %>%
+  df_site <- bind_rows(df_site, off_intervals) %>%
     arrange(Start.DT)
+  
+  # off_start_end <- df_site %>% 
+  #   mutate(next_start = min.DT) %>% 
+  #   filter(!is.na(next_start) & max.DT < next_start)
+    
 }
 
 
-
-# SWW_processed <- SWW_data %>% 
-#   filter(!is.na(End.DT), !is.na(Start.DT)) %>% 
-#   mutate(Duration.DT = End.DT - Start.DT) 
-
-# SWW_off <- SWW_data %>%
-#   group_by(Water.Company) %>% 
-#   arrange(Start.DT) %>%
-#   mutate(next_start = lead(Start.DT)) %>%
-#   filter(!is.na(next_start)) %>%
-#   filter(End.DT < next_start) %>%
-#   transmute(
-#     Start.DT = End.DT,
-#     End.DT = next_start,
-#     Event.Type = "none"
-#   )
-
 SWW_processed <- SWW_data %>%
   group_by(Water.Company) %>%
-  group_modify(~ generate_full_status(.x)) %>%
-  ungroup()
+  group_modify(~ generate_full_status(.x, 
+                                      min.DT = SWW_min_dt, 
+                                      max.DT = SWW_max_dt)) %>%
+  ungroup() 
 
-# Combine all intervals
-all_intervals <- bind_rows(intervals, off_intervals) %>%
-  arrange(start)
+SWW_constituencies <- constituencies %>% 
+  st_filter(st_as_sf(SWW_data, crs = 4326, coords = c("lng", "lat")))
 
+
+
+# plot them all
 SWW_processed %>%
   mutate(Status = factor(Event.Type, 
                          levels = c("spill", "maintenance", "none"),
@@ -111,7 +113,7 @@ SWW_processed %>%
                          ordered = TRUE)) %>% 
   filter(Water.Company == "SWW0853") %>%
   ggplot(aes(y = 0, col = Status)) +
-  geom_segment(aes(x = Start.DT, xend = End.DT), size = 6, alpha = 0.7) +
+  geom_segment(aes(x = Start.DT, xend = End.DT), linewidth = 6) +
   ylim(c(-1,1)) +
   labs(x = "Time", y = "Category") +
   theme_void() +
@@ -137,7 +139,7 @@ SWW_processed %>%
   
 # pal <- colorFactor(palette = "Set1", domain = SWW_data$Water.Company)
 
-#### make the map ####
+#### Overflow sites ####
 # Chose Positron for now, but ideally would use one which has blue sea
 # E.g. MapTiler Basic, but that requires API and limited usage
 
@@ -185,9 +187,21 @@ server <- function(input, output, session) {
                              levels = c("spill", "maintenance", "none"),
                              labels = c("Spill", "Offline", "None"),
                              ordered = TRUE))
+    
+    SWW_min_dt <- min(SWW_data$Start.DT, na.rm = TRUE)
+    SWW_max_dt <- max(SWW_data$End.DT, na.rm = TRUE)
+    SWW_med_dt <- median(SWW_min_dt, SWW_max_dt)
+    
+    SWW_dates <- data.frame(DT = c(SWW_min_dt,
+                                   SWW_max_dt,
+                                   SWW_med_dt),
+                            stat = c("min", "max", "med")) %>% 
+      mutate(label_date = as.Date(DT))
+    
     ggplot() +
       geom_point(data = SWW_spills, aes(y = 0.5, x = Start.DT), size = 3, shape = 6, color = "#cf121d") +
       geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), size = 6, show.legend = TRUE) +
+      geom_text(data = SWW_dates, aes(y = -0.5, x = DT, label = label_date)) +
       ylim(c(-1,1)) +
       labs(x = "Time", y = "Category") +
       theme_void() +
@@ -206,5 +220,113 @@ server <- function(input, output, session) {
 
 
 shinyApp(ui, server)
+
+
+#### Constituencies ####
+
+ui_constituency <- fluidPage(
+  # titlePanel("SAS data vis map"),
+  fluidRow(
+    column(width = 3, plotOutput("summarystat", height = "300px")),
+    column(width = 7, leafletOutput("sasmap", height = "600px"))
+  )
+)
+
+server_constituency <- function(input, output, session) {
+  
+  rv <- reactiveValues()
+  rv$selected <- NULL
+  
+  # make the map
+  output$sasmap <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng = -4.3, lat = 50.55, zoom = 8) %>%
+      addMarkers(lng = -3.5, lat = 50.7, popup = "Exeter") %>% 
+      addPolygons(data = SWW_constituencies, color = "grey", weight = 1,
+                  popup = ~PCON24NM,
+                  layerId = ~PCON24NM)
+  })
+  
+  # start off unclicked
+  # clicked_constituency <- reactiveVal(NULL)
+
+  # change to clicked if clicked
+  # observeEvent(input$sasmap_shape_click, {
+  #   clicked_constituency(input$sasmap_shape_click$id)
+  # })
+  
+  # highlight clicked polygon
+  observeEvent(input$mymap_click, {
+    new_selected <- req(input$sasmap_shape_click)
+    isolate(old_selected <- rv$selected)
+    if (is.null(old_selected) || new_selected$.nonce != old_selected$.nonce) {
+      validate(
+        need(new_selected$group != "selection", message = FALSE)
+      )
+      rv$selected <- new_selected
+      i <- which(africa$id==new_selected$id) 
+      africa_filtered <- africa[i,]
+      leafletProxy("mymap") %>%
+        clearGroup("selection") %>%
+        addPolygons(
+          layerId = ~id,
+          group = "selection",
+          data = africa_filtered,
+          fillColor = "cyan",
+          weight = 1.2,
+          color = "#666666",
+          opacity = 0.4,
+          fillOpacity = 0.8)
+    } else {
+      rv$selected <- NULL
+      leafletProxy("mymap") %>%
+        clearGroup("selection")
+    }
+  })
+  
+  
+  # render a histogram
+  # output$barplot <- renderPlot({
+  #   req(clicked_site())  # Only run if a marker was clicked
+  #   
+  #   SWW_spills <- SWW_processed %>% 
+  #     filter(Water.Company == clicked_site()) %>%
+  #     filter(Event.Type == "spill")
+  #   
+  #   SWW_filtered <- SWW_processed %>% 
+  #     filter(Water.Company == clicked_site()) %>%
+  #     mutate(Status = factor(Event.Type, 
+  #                            levels = c("spill", "maintenance", "none"),
+  #                            labels = c("Spill", "Offline", "None"),
+  #                            ordered = TRUE))
+  #   ggplot() +
+  #     geom_point(data = SWW_spills, aes(y = 0.5, x = Start.DT), size = 3, shape = 6, color = "#cf121d") +
+  #     geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), size = 6, show.legend = TRUE) +
+  #     ylim(c(-1,1)) +
+  #     labs(x = "Time", y = "Category") +
+  #     theme_void() +
+  #     theme(axis.title.y = element_blank(),
+  #           axis.text.y = element_blank(),
+  #           legend.position = "top",
+  #           aspect.ratio = 0.3) +
+  #     scale_colour_manual(
+  #       values = c("#cf121d", "#585c62", "#1d9b7e"),
+  #       drop = FALSE
+  #     )
+    
+  # })
+  
+}
+
+
+shinyApp(ui_constituency, server_constituency)
+# polygon highlight
+# summary stats
+# number of events
+# event duration
+# number expected to be dry/illegal
+# MP info
+# email template
 
 
