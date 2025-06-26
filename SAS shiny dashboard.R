@@ -50,6 +50,8 @@ SWW_data <- sewage_processed_data %>%
   filter(Asset.ID == "South West") %>% 
   filter(!is.na(End.DT), !is.na(Start.DT)) 
 
+SWW_data_sf <- sf::st_as_sf(SWW_data, crs = 4326, coords = c("lng", "lat"))
+
 SWW_tags <- SWW_data %>% 
   select(lng, lat, Water.Company, Asset.ID) %>% 
   distinct()
@@ -66,12 +68,23 @@ generate_full_status <- function(df_site, min.DT, max.DT) {
   # Ensure proper ordering
   df_site <- df_site %>% arrange(Start.DT)
   
+  # make leading start row
+  if(!min.DT %in% min(df_site$Start.DT)){
+    start_row <- slice(df_site, 1) %>% 
+      mutate(next_start = Start.DT,
+             End.DT = min.DT,
+             Start.DT = NA)
+  } else{
+    start_row <- NULL
+  }
+  
   # Create "off" intervals in gaps between end[i] and start[i+1]
   off_intervals <- df_site %>%
     mutate(next_start = lead(Start.DT)) %>% 
     mutate(next_start = case_when(is.na(next_start) & End.DT != max.DT ~ max.DT,
                                   TRUE ~ next_start)) %>% 
     filter(!is.na(next_start) & End.DT < next_start) %>%
+    bind_rows(., start_row) %>% 
     transmute(
       # Water.Company = first(Water.Company),
       Start.DT = End.DT,
@@ -106,25 +119,27 @@ SWW_constituencies <- constituencies %>%
 
 
 # plot them all
-SWW_processed %>%
-  mutate(Status = factor(Event.Type, 
-                         levels = c("spill", "maintenance", "none"),
-                         labels = c("Spill", "Maintenance", "None"),
-                         ordered = TRUE)) %>% 
-  filter(Water.Company == "SWW0853") %>%
-  ggplot(aes(y = 0, col = Status)) +
-  geom_segment(aes(x = Start.DT, xend = End.DT), linewidth = 6) +
-  ylim(c(-1,1)) +
-  labs(x = "Time", y = "Category") +
-  theme_void() +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        legend.position = "top",
-        aspect.ratio = 0.3) +
-  scale_colour_manual(
-    values = c("#cf121d", "#585c62", "#1d9b7e"),
-    drop = FALSE
-  )
+if(FALSE){
+  SWW_processed %>%
+    mutate(Status = factor(Event.Type, 
+                           levels = c("spill", "maintenance", "none"),
+                           labels = c("Spill", "Maintenance", "None"),
+                           ordered = TRUE)) %>% 
+    filter(Water.Company == "SWW0853") %>%
+    ggplot(aes(y = 0, col = Status)) +
+    geom_segment(aes(x = Start.DT, xend = End.DT), linewidth = 6) +
+    ylim(c(-1,1)) +
+    labs(x = "Time", y = "Category") +
+    theme_void() +
+    theme(axis.title.y = element_blank(),
+          axis.text.y = element_blank(),
+          legend.position = "top",
+          aspect.ratio = 0.3) +
+    scale_colour_manual(
+      values = c("#cf121d", "#585c62", "#1d9b7e"),
+      drop = FALSE
+    )
+}
 
   
 
@@ -200,7 +215,7 @@ server <- function(input, output, session) {
     
     ggplot() +
       geom_point(data = SWW_spills, aes(y = 0.5, x = Start.DT), size = 3, shape = 6, color = "#cf121d") +
-      geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), size = 6, show.legend = TRUE) +
+      geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), linewidth = 6, show.legend = TRUE) +
       geom_text(data = SWW_dates, aes(y = -0.5, x = DT, label = label_date)) +
       ylim(c(-1,1)) +
       labs(x = "Time", y = "Category") +
@@ -227,7 +242,7 @@ shinyApp(ui, server)
 ui_constituency <- fluidPage(
   # titlePanel("SAS data vis map"),
   fluidRow(
-    column(width = 3, plotOutput("summarystat", height = "300px")),
+    column(width = 3, tableOutput("summarystat")),
     column(width = 7, leafletOutput("sasmap", height = "600px"))
   )
 )
@@ -245,7 +260,13 @@ server_constituency <- function(input, output, session) {
       addMarkers(lng = -3.5, lat = 50.7, popup = "Exeter") %>% 
       addPolygons(data = SWW_constituencies, color = "grey", weight = 1,
                   popup = ~PCON24NM,
-                  layerId = ~PCON24NM)
+                  layerId = ~PCON24NM,
+                  group = "base")
+      # addPolygons(data = SWW_constituencies, color = "blue", weight = 1,
+      #             fillColor = "blue",
+      #             fillOpacity = 0.5, 
+      #             popup = ~PCON24NM,
+      #             layerId = ~PCON24NM)
   })
   
   # start off unclicked
@@ -257,33 +278,80 @@ server_constituency <- function(input, output, session) {
   # })
   
   # highlight clicked polygon
-  observeEvent(input$mymap_click, {
-    new_selected <- req(input$sasmap_shape_click)
-    isolate(old_selected <- rv$selected)
-    if (is.null(old_selected) || new_selected$.nonce != old_selected$.nonce) {
-      validate(
-        need(new_selected$group != "selection", message = FALSE)
+  observeEvent(input$sasmap_shape_click, {
+    clicked_id <- input$sasmap_shape_click$id
+    
+    clicked_poly <- SWW_constituencies[SWW_constituencies$PCON24NM == clicked_id, ]
+    clicked_data <- sf::st_filter(SWW_data_sf, clicked_poly)
+    
+    # 
+    spill_data <- clicked_data %>%
+      filter(Event.Type == "spill") %>% 
+      mutate(duration = End.DT - Start.DT)
+    
+    summary_data <- data.frame(
+      N_events = nrow(spill_data),
+      Hrs_spill = sum(spill_data$duration),
+      N_sites = length(unique(clicked_data$Water.Company)),
+      Constituency = clicked_id,
+      Total_duration = nrow(SWW_processed),
+      MPs_email = "YourLocalMP@email.com"
+    ) %>% 
+      mutate(Hrs_per_site = Hrs_spill/N_sites)
+    
+    
+    
+    # Clear any previous highlight, then add new one
+    leafletProxy("sasmap") %>%
+      clearGroup("highlight") %>%
+      addPolygons(data = clicked_poly,
+                  color = "darkgrey", weight = 3,
+                  fillColor = "darkgrey", fillOpacity = 0.6,
+                  layerId = "highlighted",
+                  group = "highlight")
+    
+    
+    # Produce table of summary stats
+    output$summarystat <- renderTable({
+      # Replace with the actual columns you want to show
+      data.frame(
+        Statistic = names(summary_data),
+        Value = as.character(t(summary_data)[,1]),
+        row.names = NULL
       )
-      rv$selected <- new_selected
-      i <- which(africa$id==new_selected$id) 
-      africa_filtered <- africa[i,]
-      leafletProxy("mymap") %>%
-        clearGroup("selection") %>%
-        addPolygons(
-          layerId = ~id,
-          group = "selection",
-          data = africa_filtered,
-          fillColor = "cyan",
-          weight = 1.2,
-          color = "#666666",
-          opacity = 0.4,
-          fillOpacity = 0.8)
-    } else {
-      rv$selected <- NULL
-      leafletProxy("mymap") %>%
-        clearGroup("selection")
-    }
+    })
+    
+    
   })
+  
+  
+  # observeEvent(input$sasmap_click, {
+  #   new_selected <- req(input$sasmap_shape_click)
+  #   isolate(old_selected <- rv$selected)
+  #   if (is.null(old_selected) || new_selected$.nonce != old_selected$.nonce) {
+  #     validate(
+  #       need(new_selected$group != "selection", message = FALSE)
+  #     )
+  #     rv$selected <- new_selected
+  #     i <- which(africa$id==new_selected$id) 
+  #     africa_filtered <- africa[i,]
+  #     leafletProxy("mymap") %>%
+  #       clearGroup("selection") %>%
+  #       addPolygons(
+  #         layerId = ~id,
+  #         group = "selection",
+  #         data = africa_filtered,
+  #         fillColor = "cyan",
+  #         weight = 1.2,
+  #         color = "#666666",
+  #         opacity = 0.4,
+  #         fillOpacity = 0.8)
+  #   } else {
+  #     rv$selected <- NULL
+  #     leafletProxy("mymap") %>%
+  #       clearGroup("selection")
+  #   }
+  # })
   
   
   # render a histogram
