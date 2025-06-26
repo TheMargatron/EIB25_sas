@@ -18,6 +18,7 @@ library(leaflet)
 library(tmap)
 library(rnaturalearth)
 library(xlsx)
+library(rsconnect)
 
 #### setup ####
 CSO_data <- 
@@ -176,8 +177,9 @@ server <- function(input, output, session) {
       addMarkers(lng = -3.5, lat = 50.7, popup = "Exeter") %>% 
       addCircleMarkers(data = SWW_tags, ~lng, ~lat, 
                        radius = 3, weight = 1,
-                       fillColor = "#06BCC1", color = "black", fill = TRUE,
-                       layerId = ~Water.Company, popup = ~Water.Company)
+                       fillColor = "#57c2e2", color = "black", fill = TRUE,
+                       layerId = ~Water.Company,
+                       group = "points")
   })
   
   # start off unclicked
@@ -186,9 +188,41 @@ server <- function(input, output, session) {
   # change to clicked if clicked
   observeEvent(input$sasmap_marker_click, {
     clicked_site(input$sasmap_marker_click$id)
+
+    clicked_point <- SWW_data[SWW_data$Water.Company == clicked_site(), ]
+    river_points <- SWW_data[SWW_data$Receiving.Water %in% clicked_point$Receiving.Water, ]
+
+    leafletProxy("sasmap") %>%
+      clearGroup("highlight") %>%
+      clearGroup("river") %>%
+      addCircleMarkers(
+        data = river_points,
+        lng = ~lng, lat = ~lat,
+        radius = 5,
+        color = "#fcd518",
+        fillColor = "#fcd518",
+        fillOpacity = 0.5,
+        group = "river"
+      ) %>% 
+      addCircleMarkers(
+        data = clicked_point,
+        lng = ~lng, lat = ~lat,
+        radius = 5,
+        color = "#d3af00",
+        fillColor = "#d3af00",
+        fillOpacity = 1,
+        group = "highlight"
+      )
+    
   })
   
-  # render a histogram
+  # highlight the point 
+  
+  
+  # highlight points on the same river
+  
+  
+  # render the barplot
   output$barplot <- renderPlot({
     req(clicked_site())  # Only run if a marker was clicked
     
@@ -218,12 +252,13 @@ server <- function(input, output, session) {
       geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), linewidth = 6, show.legend = TRUE) +
       geom_text(data = SWW_dates, aes(y = -0.5, x = DT, label = label_date)) +
       ylim(c(-1,1)) +
-      labs(x = "Time", y = "Category") +
+      labs(x = "Time", y = "Category", title = unique(SWW_filtered$Water.Company)) +
       theme_void() +
       theme(axis.title.y = element_blank(),
             axis.text.y = element_blank(),
             legend.position = "top",
             aspect.ratio = 0.3) +
+      theme(plot.title = element_text(vjust=5)) +
       scale_colour_manual(
         values = c("#cf121d", "#585c62", "#1d9b7e"),
         drop = FALSE
