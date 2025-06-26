@@ -242,7 +242,7 @@ shinyApp(ui, server)
 ui_constituency <- fluidPage(
   # titlePanel("SAS data vis map"),
   fluidRow(
-    column(width = 3, tableOutput("summarystat")),
+    column(width = 3, uiOutput("summarytitle"), tableOutput("summarystat")),
     column(width = 7, leafletOutput("sasmap", height = "600px"))
   )
 )
@@ -258,7 +258,8 @@ server_constituency <- function(input, output, session) {
       addProviderTiles("CartoDB.Positron") %>%
       setView(lng = -4.3, lat = 50.55, zoom = 8) %>%
       addMarkers(lng = -3.5, lat = 50.7, popup = "Exeter") %>% 
-      addPolygons(data = SWW_constituencies, color = "grey", weight = 1,
+      addPolygons(data = SWW_constituencies, color = "#fcd518", weight = 1,
+                  fillOpacity = 0.4,
                   popup = ~PCON24NM,
                   layerId = ~PCON24NM,
                   group = "base")
@@ -289,101 +290,65 @@ server_constituency <- function(input, output, session) {
       filter(Event.Type == "spill") %>% 
       mutate(duration = End.DT - Start.DT)
     
-    summary_data <- data.frame(
-      N_events = nrow(spill_data),
-      Hrs_spill = sum(spill_data$duration),
-      N_sites = length(unique(clicked_data$Water.Company)),
-      Constituency = clicked_id,
-      Total_duration = nrow(SWW_processed),
-      MPs_email = "YourLocalMP@email.com"
-    ) %>% 
-      mutate(Hrs_per_site = Hrs_spill/N_sites)
+    n_weeks <- floor(as.numeric(SWW_max_dt - SWW_min_dt, units = "weeks"))
     
+    summary_data <- data.frame(
+      N_events = paste(nrow(spill_data),
+                       "spills since",
+                       as.Date(SWW_min_dt),
+                       # "spills over", 
+                       # as.character(n_weeks), 
+                       # "weeks", 
+                       sep = " "),
+      Hrs_spill = sum(spill_data$duration),
+      N_sites = length(unique(clicked_data$Water.Company))
+      ) %>% 
+        mutate(
+          # Hrs_per_site = as.numeric(Hrs_spill/N_sites, units = "hours"),
+          Hrs_per_site = paste(floor(as.numeric(Hrs_spill/N_sites, units = "hours")),
+                               "hours per site",
+                               sep = " "),
+          N_sites = paste(length(unique(clicked_data$Water.Company)),
+                          "sites",
+                          sep = " "),
+          Hrs_spill = paste(floor(as.numeric(Hrs_spill, units = "hours")),
+                            "hours over",
+                            as.character(n_weeks),
+                            "weeks",
+                            sep = " "),
+          Water_company = paste("Courtesy of", unique(spill_data$Asset.ID), "Water", sep = " "),
+          MPs_email = paste("Send this to",
+                            "YourLocalMP@email.com",
+                            sep = " ")
+        )
     
     
     # Clear any previous highlight, then add new one
     leafletProxy("sasmap") %>%
       clearGroup("highlight") %>%
       addPolygons(data = clicked_poly,
-                  color = "darkgrey", weight = 3,
-                  fillColor = "darkgrey", fillOpacity = 0.6,
+                  color = "#57c2e2", weight = 3,
+                  fillColor = "#57c2e2", fillOpacity = 0.6,
                   layerId = "highlighted",
                   group = "highlight")
     
     
     # Produce table of summary stats
+    output$summarytitle <- renderUI({
+      h4(clicked_id)
+    })
+    
     output$summarystat <- renderTable({
       # Replace with the actual columns you want to show
       data.frame(
-        Statistic = names(summary_data),
+        # Statistic = names(summary_data),
         Value = as.character(t(summary_data)[,1]),
         row.names = NULL
       )
-    })
+    }, colnames = FALSE)
     
     
   })
-  
-  
-  # observeEvent(input$sasmap_click, {
-  #   new_selected <- req(input$sasmap_shape_click)
-  #   isolate(old_selected <- rv$selected)
-  #   if (is.null(old_selected) || new_selected$.nonce != old_selected$.nonce) {
-  #     validate(
-  #       need(new_selected$group != "selection", message = FALSE)
-  #     )
-  #     rv$selected <- new_selected
-  #     i <- which(africa$id==new_selected$id) 
-  #     africa_filtered <- africa[i,]
-  #     leafletProxy("mymap") %>%
-  #       clearGroup("selection") %>%
-  #       addPolygons(
-  #         layerId = ~id,
-  #         group = "selection",
-  #         data = africa_filtered,
-  #         fillColor = "cyan",
-  #         weight = 1.2,
-  #         color = "#666666",
-  #         opacity = 0.4,
-  #         fillOpacity = 0.8)
-  #   } else {
-  #     rv$selected <- NULL
-  #     leafletProxy("mymap") %>%
-  #       clearGroup("selection")
-  #   }
-  # })
-  
-  
-  # render a histogram
-  # output$barplot <- renderPlot({
-  #   req(clicked_site())  # Only run if a marker was clicked
-  #   
-  #   SWW_spills <- SWW_processed %>% 
-  #     filter(Water.Company == clicked_site()) %>%
-  #     filter(Event.Type == "spill")
-  #   
-  #   SWW_filtered <- SWW_processed %>% 
-  #     filter(Water.Company == clicked_site()) %>%
-  #     mutate(Status = factor(Event.Type, 
-  #                            levels = c("spill", "maintenance", "none"),
-  #                            labels = c("Spill", "Offline", "None"),
-  #                            ordered = TRUE))
-  #   ggplot() +
-  #     geom_point(data = SWW_spills, aes(y = 0.5, x = Start.DT), size = 3, shape = 6, color = "#cf121d") +
-  #     geom_segment(data = SWW_filtered, aes(y = 0, x = Start.DT, xend = End.DT, color = Status), size = 6, show.legend = TRUE) +
-  #     ylim(c(-1,1)) +
-  #     labs(x = "Time", y = "Category") +
-  #     theme_void() +
-  #     theme(axis.title.y = element_blank(),
-  #           axis.text.y = element_blank(),
-  #           legend.position = "top",
-  #           aspect.ratio = 0.3) +
-  #     scale_colour_manual(
-  #       values = c("#cf121d", "#585c62", "#1d9b7e"),
-  #       drop = FALSE
-  #     )
-    
-  # })
   
 }
 
