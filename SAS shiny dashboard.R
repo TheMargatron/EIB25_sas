@@ -1,12 +1,12 @@
 # =============================================================================
 # Title:        EIB25 Surfers Against Sewage Shiny dashboard
-# Description:  Shiny dashboard for 
+# Description:  Shiny dashboard for EIB Grand Challenge
 # Author:       Margaret Bolton <mb804 (at) exeter.ac.uk>
 # Created:      2025-06-23
-# Last updated: 2025-06-23
+# Last updated: 2025-06-27
 # Dependencies: shiny, leaflet, dplyr, sf
-# Inputs:       model outputs from /data/predictions.rds
-# Outputs:      Shiny app interface (hosted online)
+# Inputs:       aggregated static data from water company APIs
+# Outputs:      Shiny app interface
 # =============================================================================
 
 #### Libraries ####
@@ -18,14 +18,14 @@ library(leaflet)
 library(tmap)
 library(rnaturalearth)
 library(xlsx)
-library(rsconnect)
+# library(rsconnect)
 
 #### setup ####
-CSO_data <- 
+CSO_data <-
   xlsx::read.xlsx(
-    here::here("Data", "CSO Database.xlsx"), 
+    here::here("Data", "CSO Database.xlsx"),
     sheetIndex = 1
-  ) 
+  )
 
 sewage_events_data <- 
   read.csv(
@@ -155,7 +155,10 @@ if(FALSE){
   
 # pal <- colorFactor(palette = "Set1", domain = SWW_data$Water.Company)
 
-#### Overflow sites ####
+
+
+#### Sites app ####
+
 # Chose Positron for now, but ideally would use one which has blue sea
 # E.g. MapTiler Basic, but that requires API and limited usage
 
@@ -164,7 +167,7 @@ ui <- fluidPage(
   fluidRow(
     column(width = 3, plotOutput("barplot", height = "300px")),
     column(width = 7, leafletOutput("sasmap", height = "600px"))
-    )
+  )
 )
 
 server <- function(input, output, session) {
@@ -188,10 +191,10 @@ server <- function(input, output, session) {
   # change to clicked if clicked
   observeEvent(input$sasmap_marker_click, {
     clicked_site(input$sasmap_marker_click$id)
-
+    
     clicked_point <- SWW_data[SWW_data$Water.Company == clicked_site(), ]
     river_points <- SWW_data[SWW_data$Receiving.Water %in% clicked_point$Receiving.Water, ]
-
+    
     leafletProxy("sasmap") %>%
       clearGroup("highlight") %>%
       clearGroup("river") %>%
@@ -263,7 +266,7 @@ server <- function(input, output, session) {
         values = c("#cf121d", "#585c62", "#1d9b7e"),
         drop = FALSE
       )
-
+    
   })
   
 }
@@ -271,8 +274,7 @@ server <- function(input, output, session) {
 
 shinyApp(ui, server)
 
-
-#### Constituencies ####
+#### Constituencies app ####
 
 ui_constituency <- fluidPage(
   # titlePanel("SAS data vis map"),
@@ -298,16 +300,16 @@ server_constituency <- function(input, output, session) {
                   popup = ~PCON24NM,
                   layerId = ~PCON24NM,
                   group = "base")
-      # addPolygons(data = SWW_constituencies, color = "blue", weight = 1,
-      #             fillColor = "blue",
-      #             fillOpacity = 0.5, 
-      #             popup = ~PCON24NM,
-      #             layerId = ~PCON24NM)
+    # addPolygons(data = SWW_constituencies, color = "blue", weight = 1,
+    #             fillColor = "blue",
+    #             fillOpacity = 0.5, 
+    #             popup = ~PCON24NM,
+    #             layerId = ~PCON24NM)
   })
   
   # start off unclicked
   # clicked_constituency <- reactiveVal(NULL)
-
+  
   # change to clicked if clicked
   # observeEvent(input$sasmap_shape_click, {
   #   clicked_constituency(input$sasmap_shape_click$id)
@@ -337,25 +339,25 @@ server_constituency <- function(input, output, session) {
                        sep = " "),
       Hrs_spill = sum(spill_data$duration),
       N_sites = length(unique(clicked_data$Water.Company))
-      ) %>% 
-        mutate(
-          # Hrs_per_site = as.numeric(Hrs_spill/N_sites, units = "hours"),
-          Hrs_per_site = paste(floor(as.numeric(Hrs_spill/N_sites, units = "hours")),
-                               "hours per site",
-                               sep = " "),
-          N_sites = paste(length(unique(clicked_data$Water.Company)),
-                          "sites",
+    ) %>% 
+      mutate(
+        # Hrs_per_site = as.numeric(Hrs_spill/N_sites, units = "hours"),
+        Hrs_per_site = paste(floor(as.numeric(Hrs_spill/N_sites, units = "hours")),
+                             "hours per site",
+                             sep = " "),
+        N_sites = paste(length(unique(clicked_data$Water.Company)),
+                        "sites",
+                        sep = " "),
+        Hrs_spill = paste(floor(as.numeric(Hrs_spill, units = "hours")),
+                          "hours over",
+                          as.character(n_weeks),
+                          "weeks",
                           sep = " "),
-          Hrs_spill = paste(floor(as.numeric(Hrs_spill, units = "hours")),
-                            "hours over",
-                            as.character(n_weeks),
-                            "weeks",
-                            sep = " "),
-          Water_company = paste("Courtesy of", unique(spill_data$Asset.ID), "Water", sep = " "),
-          MPs_email = paste("Send this to",
-                            "YourLocalMP@email.com",
-                            sep = " ")
-        )
+        Water_company = paste("Courtesy of", unique(spill_data$Asset.ID), "Water", sep = " "),
+        MPs_email = paste("Send this to",
+                          "YourLocalMP@email.com",
+                          sep = " ")
+      )
     
     
     # Clear any previous highlight, then add new one
@@ -389,12 +391,3 @@ server_constituency <- function(input, output, session) {
 
 
 shinyApp(ui_constituency, server_constituency)
-# polygon highlight
-# summary stats
-# number of events
-# event duration
-# number expected to be dry/illegal
-# MP info
-# email template
-
-
