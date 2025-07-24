@@ -21,18 +21,18 @@ library(xlsx)
 # library(rsconnect)
 
 #### setup ####
-CSO_data <-
-  xlsx::read.xlsx(
-    here::here("Data", "CSO Database.xlsx"),
-    sheetIndex = 1
-  )
+# CSO_data <-
+#   xlsx::read.xlsx(
+#     here::here(dirname(here::here()), "Data", "CSO Database.xlsx"),
+#     sheetIndex = 1
+#   )
 
 sewage_events_data <- 
   read.csv(
-    here::here("Data", "Sewage events 2025.csv")
+    here::here(dirname(here::here()), "Data", "Sewage events 2025.csv")
   ) 
 
-constituencies <- sf::read_sf(dsn = here::here("Data", "Constituencies_July_2024")) %>% 
+constituencies <- sf::read_sf(dsn = here::here(dirname(here::here()), "Data", "Constituencies_July_2024")) %>% 
   st_transform(shape, crs = 4326)
 
 # tm_shape(constituencies) + tm_polygons()
