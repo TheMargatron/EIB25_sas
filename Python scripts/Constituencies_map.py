@@ -46,6 +46,58 @@ constituency_shape = (gpd.read_file(project_root / 'Data/Constituencies_July_202
 
 EDM_static_data = pd.read_csv(project_root / 'Data/Sewage events 2025.csv')
 
+# prep map
+# def generate_map_fig():
+#     fig = go.Figure()
+
+#     for _, row in constituency_shape.iterrows():
+#         geo = row.geometry
+#         if geo.geom_type == "Polygon":
+#             polys = [geo]
+#         elif geo.geom_type == "MultiPolygon":
+#             polys = geo.geoms
+#         else:
+#             continue
+
+#         for poly in polys:
+#             lon, lat = poly.exterior.coords.xy
+#             fig.add_trace(go.Scattermapbox(
+#                 lon=lon, lat=lat,
+#                 mode="lines",
+#                 fill="toself",
+#                 name=row["id"],
+#                 customdata=[row["id"]] * len(lon),
+#                 hoverinfo="text"
+#             ))
+
+#     fig.update_layout(
+#         mapbox_style="carto-positron",
+#         mapbox_zoom=10,
+#         # mapbox_center={
+#         #     "lat": constituency_shape.geometry.centroid.y.mean(),
+#         #     "lon": constituency_shape.geometry.centroid.x.mean()
+#         #     },
+#         # clickmode="event+select",
+#         margin=dict(l=0, r=0, t=0, b=0),
+#         showlegend=False
+#     )
+#     return fig
+
+# temporarily using scattermapbox before setting up access token
+def generate_map_fig():
+    fig = go.Figure(go.Scattermapbox(
+        lat=[], lon=[], mode='markers'  # No markers yet
+    ))
+
+    fig.update_layout(
+        mapbox_style="carto-positron",  # Free basemap
+        mapbox_zoom=8,                  # Zoom level
+        mapbox_center={"lat": 50.7, "lon": -3.5},  # Exeter center
+        margin={"r":0, "t":0, "l":0, "b":0}      # No whitespace
+    )
+
+    return fig
+
 # map on left, plot on right 
 # later will adapt to mobile with plot below
 app.layout = html.Div(
@@ -66,17 +118,47 @@ app.layout = html.Div(
             children=[
                 dcc.Graph(
                     id='constituency_plot',
+                    style={'width' : '30vw'},
                     figure={}
                 ),
                 dcc.Graph(
                     id='constituency_map',
-                    figure={}
+                    style={'width' : '70vw'},
+                    figure=generate_map_fig()
                 )
             ]
         )
     ]
 
 )
+
+
+# @app.callback(
+#     Output('constituency_map', 'figure'),
+#     Input('constituency_map', 'id')
+# )
+# def create_map(_):
+#     fig = go.Figure()
+
+#     # Add constituency boundaries
+#     for idx, row in constituency_shape.iterrows():
+#         fig.add_trace(go.Scattermap(
+#             mode="lines",
+#             lon=[], lat=[],  # You'd need to extract coordinates from geometry
+#             name=row['PCON24NM'],
+#             customdata=[row['PCON24NM']],
+#             hovertemplate="<b>%{customdata}</b><extra></extra>"
+#         ))
+    
+#     fig.update_layout(
+#         mapbox=dict(
+#             style="open-street-map",
+#             center=dict(lat=50.7, lon=-3.5),
+#             zoom=8
+#         ),
+#         showlegend=False
+#     )
+#     return fig
 
 if __name__ == "__main__":
     app.run(debug=True)
