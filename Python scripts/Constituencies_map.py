@@ -22,6 +22,8 @@ import dash
 import cufflinks as cf
 from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
+import dash_leaflet as dl
+import plotly.express as px
 # import requests
 # import Data_wrangling
 
@@ -43,6 +45,8 @@ project_root = Path(__file__).parent.parent.resolve()
 # (later will come from data wrangling, but currently still raw)
 constituency_shape = (gpd.read_file(project_root / 'Data/Constituencies_July_2024/PCON_JULY_2024_UK_BSC.shp')
                         .to_crs(epsg=4326))
+constituency_shape["id"] = constituency_shape.index.astype(str)
+constituency_shape = constituency_shape.__geo_interface__
 
 EDM_static_data = pd.read_csv(project_root / 'Data/Sewage events 2025.csv')
 
@@ -84,19 +88,19 @@ EDM_static_data = pd.read_csv(project_root / 'Data/Sewage events 2025.csv')
 #     return fig
 
 # temporarily using scattermapbox before setting up access token
-def generate_map_fig():
-    fig = go.Figure(go.Scattermapbox(
-        lat=[], lon=[], mode='markers'  # No markers yet
-    ))
+# def generate_map_fig():
+#     fig = go.Figure(go.Scattermapbox(
+#         lat=[], lon=[], mode='markers'  # No markers yet
+#     ))
 
-    fig.update_layout(
-        mapbox_style="carto-positron",  # Free basemap
-        mapbox_zoom=8,                  # Zoom level
-        mapbox_center={"lat": 50.7, "lon": -3.5},  # Exeter center
-        margin={"r":0, "t":0, "l":0, "b":0}      # No whitespace
-    )
+#     fig.update_layout(
+#         mapbox_style="carto-positron",  # Free basemap
+#         mapbox_zoom=8,                  # Zoom level
+#         mapbox_center={"lat": 50.7, "lon": -3.5},  # Exeter center
+#         margin={"r":0, "t":0, "l":0, "b":0}      # No whitespace
+#     )
 
-    return fig
+#     return fig
 
 # map on left, plot on right 
 # later will adapt to mobile with plot below
@@ -112,26 +116,67 @@ app.layout = html.Div(
                         Sewage data is aggregated to the constituency level from water company APIs."),
             ]
         ),
+        # Main container for basic map and plot
         html.Div(
-            id="constituency_map_container",
-            style={'display': 'flex', 'flexDirection': 'row', 'height': '100vh'},
+            id="constituency_dash_container",
+            style={'display': 'flex', 'flexDirection': 'row', 'height': '75vh'},
             children=[
+                dl.Map(
+                    id="constituency_map",
+                    style={'width' : '65vw'},
+                    children=[
+                        dl.TileLayer(),
+                        dl.GeoJSON(
+                            data=constituency_shape,
+                            options=dict(style=dict(fillColor="blue", color="black", weight=1, fillOpacity=0.3)),
+                            hoverStyle=dict(weight=2, fill="red", fillOpacity=0.6)
+                        )
+                    ],
+                    center=[50.7, -3.5],
+                    zoom=8
+                ),
                 dcc.Graph(
                     id='constituency_plot',
                     style={'width' : '30vw'},
                     figure={}
-                ),
-                dcc.Graph(
-                    id='constituency_map',
-                    style={'width' : '70vw'},
-                    figure=generate_map_fig()
                 )
             ]
         )
+        # html.Div(
+        #     id="constituency_map_container",
+        #     style={'display': 'flex', 'flexDirection': 'row', 'height': '90vh'},
+        #     children=[
+        #         dcc.Graph(
+        #             id='constituency_plot',
+        #             style={'width' : '30vw'},
+        #             figure={}
+        #         ),
+        #         dcc.Graph(
+        #             id='constituency_map',
+        #             style={'width' : '70vw'},
+        #             figure=generate_map_fig()
+        #         )
+        #     ]
+        # )
     ]
 
 )
 
+# Callback to highlight constituency on hover
+# @app.callback(
+#     Output('constituency_map', 'style'),
+#     Input('constituency_map', 'hoverData')
+# )
+# def highlight_constituency(hoverData):
+#     if hoverData is None:
+#         return {'width': '65vw'}
+#     else:
+#         # Get the ID of the hovered constituency
+#         constituency_id = hoverData['points'][0]['customdata'][0]
+#         return {
+#             'width': '65vw',
+#             'highlighted': constituency_id
+#         }
 
 # @app.callback(
 #     Output('constituency_map', 'figure'),
