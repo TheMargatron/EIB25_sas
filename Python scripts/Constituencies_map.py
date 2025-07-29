@@ -50,58 +50,6 @@ constituency_shape = constituency_shape.__geo_interface__
 
 EDM_static_data = pd.read_csv(project_root / 'Data/Sewage events 2025.csv')
 
-# prep map
-# def generate_map_fig():
-#     fig = go.Figure()
-
-#     for _, row in constituency_shape.iterrows():
-#         geo = row.geometry
-#         if geo.geom_type == "Polygon":
-#             polys = [geo]
-#         elif geo.geom_type == "MultiPolygon":
-#             polys = geo.geoms
-#         else:
-#             continue
-
-#         for poly in polys:
-#             lon, lat = poly.exterior.coords.xy
-#             fig.add_trace(go.Scattermapbox(
-#                 lon=lon, lat=lat,
-#                 mode="lines",
-#                 fill="toself",
-#                 name=row["id"],
-#                 customdata=[row["id"]] * len(lon),
-#                 hoverinfo="text"
-#             ))
-
-#     fig.update_layout(
-#         mapbox_style="carto-positron",
-#         mapbox_zoom=10,
-#         # mapbox_center={
-#         #     "lat": constituency_shape.geometry.centroid.y.mean(),
-#         #     "lon": constituency_shape.geometry.centroid.x.mean()
-#         #     },
-#         # clickmode="event+select",
-#         margin=dict(l=0, r=0, t=0, b=0),
-#         showlegend=False
-#     )
-#     return fig
-
-# temporarily using scattermapbox before setting up access token
-# def generate_map_fig():
-#     fig = go.Figure(go.Scattermapbox(
-#         lat=[], lon=[], mode='markers'  # No markers yet
-#     ))
-
-#     fig.update_layout(
-#         mapbox_style="carto-positron",  # Free basemap
-#         mapbox_zoom=8,                  # Zoom level
-#         mapbox_center={"lat": 50.7, "lon": -3.5},  # Exeter center
-#         margin={"r":0, "t":0, "l":0, "b":0}      # No whitespace
-#     )
-
-#     return fig
-
 # map on left, plot on right 
 # later will adapt to mobile with plot below
 app.layout = html.Div(
@@ -127,10 +75,13 @@ app.layout = html.Div(
                     children=[
                         dl.TileLayer(),
                         dl.GeoJSON(
+                            id="constituencies_geojson",
                             data=constituency_shape,
                             options=dict(style=dict(fillColor="blue", color="black", weight=1, fillOpacity=0.3)),
                             hoverStyle=dict(weight=2, fill="red", fillOpacity=0.6)
-                        )
+                        ),
+                        # empty layer for highlighted constituency
+                        html.Div(id="highlight_container")
                     ],
                     center=[50.7, -3.5],
                     zoom=8
@@ -142,68 +93,38 @@ app.layout = html.Div(
                 )
             ]
         )
-        # html.Div(
-        #     id="constituency_map_container",
-        #     style={'display': 'flex', 'flexDirection': 'row', 'height': '90vh'},
-        #     children=[
-        #         dcc.Graph(
-        #             id='constituency_plot',
-        #             style={'width' : '30vw'},
-        #             figure={}
-        #         ),
-        #         dcc.Graph(
-        #             id='constituency_map',
-        #             style={'width' : '70vw'},
-        #             figure=generate_map_fig()
-        #         )
-        #     ]
-        # )
     ]
 
 )
 
-# Callback to highlight constituency on hover
-# @app.callback(
-#     Output('constituency_map', 'style'),
-#     Input('constituency_map', 'hoverData')
-# )
-# def highlight_constituency(hoverData):
-#     if hoverData is None:
-#         return {'width': '65vw'}
-#     else:
-#         # Get the ID of the hovered constituency
-#         constituency_id = hoverData['points'][0]['customdata'][0]
-#         return {
-#             'width': '65vw',
-#             'highlighted': constituency_id
-#         }
 
-# @app.callback(
-#     Output('constituency_map', 'figure'),
-#     Input('constituency_map', 'id')
-# )
-# def create_map(_):
-#     fig = go.Figure()
+@app.callback(
+    Output('highlight_container', 'children'),
+    Input('constituencies_geojson', 'clickData'),
+    prevent_initial_call=True
+)
+def update_map_with_highlight(clickData):
+    # If something is clicked, add highlight layer
+    if clickData is not None:
+        clicked_id = clickData['id']
+        constituency_name = clickData['properties'].get('PCON24NM', 'Unknown')
 
-#     # Add constituency boundaries
-#     for idx, row in constituency_shape.iterrows():
-#         fig.add_trace(go.Scattermap(
-#             mode="lines",
-#             lon=[], lat=[],  # You'd need to extract coordinates from geometry
-#             name=row['PCON24NM'],
-#             customdata=[row['PCON24NM']],
-#             hovertemplate="<b>%{customdata}</b><extra></extra>"
-#         ))
+        # Find the clicked feature in your data
+        clicked_feature = None
+        for feature in constituency_shape['features']:
+            if feature['id'] == clicked_id:
+                clicked_feature = feature
+                break
+        
+        if clicked_feature:
+            # Add highlight layer with only the clicked constituency
+            layers=[dl.GeoJSON(
+                    data={'type': 'FeatureCollection', 'features': [clicked_feature]},
+                    options=dict(style=dict(fillColor="yellow", color="red", weight=3, fillOpacity=0.7))
+                )]
     
-#     fig.update_layout(
-#         mapbox=dict(
-#             style="open-street-map",
-#             center=dict(lat=50.7, lon=-3.5),
-#             zoom=8
-#         ),
-#         showlegend=False
-#     )
-#     return fig
+    return layers
+
 
 if __name__ == "__main__":
     app.run(debug=True)
