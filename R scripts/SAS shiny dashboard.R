@@ -21,18 +21,20 @@ library(xlsx)
 # library(rsconnect)
 
 #### setup ####
+project_root <- dirname(here::here())
+
 CSO_data <-
   xlsx::read.xlsx(
-    here::here(dirname(here::here()), "Data", "CSO Database.xlsx"),
+    here::here(project_root, "Data", "CSO Database.xlsx"),
     sheetIndex = 1
   )
 
 EDM_raw_data <- 
   read.csv(
-    here::here(dirname(here::here()), "Data", "Sewage events 2025.csv")
+    here::here(project_root, "Data", "Sewage events 2025.csv")
   ) 
 
-constituencies <- sf::read_sf(dsn = here::here(dirname(here::here()), "Data", "Constituencies_July_2024")) %>% 
+constituencies <- sf::read_sf(dsn = here::here(project_root, "Data", "Constituencies_July_2024")) %>% 
   st_transform(shape, crs = 4326)
 
 #### Prep the data generally ####
@@ -46,23 +48,24 @@ EDM_data <- EDM_raw_data %>%
          across(c(Start.Date, End.Date), ~as.Date(.x, format = "%d/%m/%Y"))) %>% 
   filter(!is.na(End.DT), !is.na(Start.DT))
 
-#### data prep for Constituencies app ####
+#### data prep for apps####
 # for constituencies
-EDM_sf <- sf::st_as_sf(EDM_data, crs = 4326, coords = c("lng", "lat"))
+constituencies_exploded <- sf::st_cast(constituencies, "POLYGON")
 
-EDM_min_dt <- min(EDM_data$Start.DT)
-EDM_max_dt <- max(EDM_data$End.DT)
-EDM_med_dt <- median(EDM_min_dt, EDM_max_dt)
+# pre-processing constituencies for speed later
+EDM_sf <- sf::st_as_sf(EDM_data, crs = 4326, coords = c("lng", "lat")) %>% 
+  sf::st_join(constituencies[, c("PCON24NM", "geometry")]) %>% 
+  mutate(PCON24NM = case_when(is.na(PCON24NM) ~
+                                constituencies_exploded$PCON24NM[sf::st_nearest_feature(geometry, constituencies_exploded)],
+                              TRUE ~ PCON24NM))
 
-# pre-process for speed
-EDM_sf <- sf::st_join(EDM_sf, constituencies[, c("PCON24NM", "geometry")])
+CSO_sf <- sf::st_as_sf(CSO_data, crs = 4326, coords = c("Longitude", "Latitude")) %>% 
+  sf::st_join(constituencies[, c("PCON24NM", "geometry")]) %>% 
+  mutate(PCON24NM = case_when(is.na(PCON24NM) ~
+                                constituencies_exploded$PCON24NM[sf::st_nearest_feature(geometry, constituencies_exploded)],
+                              TRUE ~ PCON24NM))
 
-EDM_sf %>% 
-  sf::st_drop_geometry() %>% 
-  group_by(PCON24NM) %>% 
-  summarise(n_comp = length(unique(Water.Company))) %>% View()
 
-#### data prep for Sites app ####
 # for intervals
 EDM_min_dt <- min(EDM_data$Start.DT)
 EDM_max_dt <- max(EDM_data$End.DT)
@@ -119,6 +122,8 @@ EDM_full_status <- EDM_data %>%
                                       max.DT = EDM_max_dt)) %>%
   ungroup() 
 
+class(EDM_full_status)
 
+write.csv(EDM_full_status, here::here(project_root, "Outputs", "EDM_full_status"))
 
 
