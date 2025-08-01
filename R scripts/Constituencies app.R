@@ -162,43 +162,51 @@ server_constituency <- function(input, output, session) {
                   layerId = "highlighted",
                   group = "highlight")
     
-    
     # Describe summary stats
     output$summarytitle <- renderUI({
       h4(clicked_id)
     })
     
-    output$summarystat <- renderText({
-      if(!is.na("hello")){
-        paste0("Since ",
-              format(as.Date(EDM_min_dt), "%B"),
-              " ",
-              ordinal_suffix(as.numeric(format(as.Date(EDM_min_dt), "%d"))),
-              " there have been ",
-              summary_data$N_spills,
-              " spills across ",
-              summary_data$N_sites,
-              " sites in ",
-              clicked_id,
-              ", courtesy of ",
-              summary_data$Companies,
-              ". <br><br>That adds up to ",
-              summary_data$Hrs_spill,
-              " hours of sewage outflow in the space of ",
-              summary_data$N_weeks,
-              " weeks. <br><br>",
-              ifelse(clicked_mp$MemberEmail != "NULL", 
-                     paste0("Send these stats to ",
-                           clicked_mp$MemberName, 
-                           ", the local MP, at: ",
-                           clicked_mp$MemberEmail
-                           ),
-                     paste0("We do not currently have an email address for the local MP, ",
-                           clicked_mp$MemberName))
-              
-              )
-      }
-    })
+    if(summary_data$N_sites == 0){
+      output$summarystat <- renderText({
+        "There are no reporting CSOs within this constituency."
+      })
+    } else if(summary_data$Hrs_spill == 0){
+      output$summarystat <- renderText({
+        paste0("There have been no recorded sewage outflows in this constituency since",
+               date_in_text(as.Date(EDM_min_dt)))
+      })
+    } else {
+      output$summarystat <- renderText({
+        if(!is.na("hello")){
+          paste0("Since ",
+                 date_in_text(as.Date(EDM_min_dt)),
+                 " there have been ",
+                 summary_data$N_spills,
+                 " spills across ",
+                 summary_data$N_sites,
+                 " sites in ",
+                 clicked_id,
+                 ", courtesy of ",
+                 summary_data$Companies,
+                 ". <br><br>That adds up to ",
+                 summary_data$Hrs_spill,
+                 " hours of sewage outflow in the space of ",
+                 summary_data$N_weeks,
+                 " weeks. <br><br>",
+                 ifelse(clicked_mp$MemberEmail != "NULL", 
+                        paste0("Send these stats to ",
+                               clicked_mp$MemberName, 
+                               ", the local MP, at: ",
+                               clicked_mp$MemberEmail
+                        ),
+                        paste0("We do not currently have an email address for the local MP, ",
+                               clicked_mp$MemberName))
+                 
+          )
+        }
+      })
+    }
     
   })
   
