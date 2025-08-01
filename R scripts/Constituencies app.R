@@ -13,7 +13,7 @@ ui_constituency <- fluidPage(
   # fonts and formatting
   # colours
   tags$head(tags$style('body {color:#FFFFFF;}')),
-  tags$head(tags$style('body {background-color: #111820;}')),
+  tags$head(tags$style('body {background-color: #2b2b2b;}')),
 
   # base font
   theme = bslib::bs_theme(base_font = bslib::font_google("Roboto")),
@@ -46,8 +46,6 @@ ui_constituency <- fluidPage(
       
       #header {
         height: 60px;
-        background-color: #111820;
-        color: white;
         display: flex;
         align-items: center;
         padding-left: 10px;
@@ -60,7 +58,9 @@ ui_constituency <- fluidPage(
       .col-sidebar {
         height: 100%;
         overflow-y: auto;
-        padding: 20px;
+        padding-top: 60px;
+        padding-left: 50px;
+        padding-right: 50px;
       }
       .col-map {
         height: 100%;
@@ -83,7 +83,8 @@ ui_constituency <- fluidPage(
                          "SAS-Texture-Tab-Practical-Mono-White-RGB.svg",
                          sep = "/"), 
              style = "height: 60px; margin-right: 10px;"),
-    h3("My Map App", style = "margin: 0;")
+    h3("Constituencies map", style = "margin: 0;"),
+    style="border-bottom: 2px solid #FFFFFF;"
   ),
   
   # layout
@@ -177,20 +178,25 @@ server_constituency <- function(input, output, session) {
                date_in_text(as.Date(EDM_min_dt)))
       })
     } else {
-      output$summarystat <- renderText({
-        if(!is.na("hello")){
-          paste0("Since ",
+      output$summarystat <- renderUI({
+          HTML(paste0("Since ",
                  date_in_text(as.Date(EDM_min_dt)),
                  " there have been ",
+                 "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
                  summary_data$N_spills,
+                 "</span>",
                  " spills across ",
                  summary_data$N_sites,
                  " sites in ",
                  clicked_id,
                  ", courtesy of ",
+                 "<span style='color:#ffdc32; font-size:20px; font-family:HVDPosterClean;'>",
                  summary_data$Companies,
+                 "</span>",
                  ". <br><br>That adds up to ",
+                 "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
                  summary_data$Hrs_spill,
+                 "</span>",
                  " hours of sewage outflow in the space of ",
                  summary_data$N_weeks,
                  " weeks. <br><br>",
@@ -198,13 +204,15 @@ server_constituency <- function(input, output, session) {
                         paste0("Send these stats to ",
                                clicked_mp$MemberName, 
                                ", the local MP, at: ",
-                               clicked_mp$MemberEmail
+                               "<span style='font-weight:bold'>",
+                               clicked_mp$MemberEmail,
+                               "</span>"
                         ),
                         paste0("We do not currently have an email address for the local MP, ",
                                clicked_mp$MemberName))
                  
           )
-        }
+        )
       })
     }
     
