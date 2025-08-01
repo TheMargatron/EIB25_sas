@@ -137,9 +137,8 @@ server_constituency <- function(input, output, session) {
     
     # 
     spill_data <- clicked_data %>%
-      filter(Event.Type == "spill") %>% 
-      mutate(duration      = floor(difftime(End.DT, Start.DT, units = "hours")),
-             Water.Company = paste(Water.Company, "Water", sep = " ")) 
+      filter(Event.Type2 == "spill") %>% 
+      mutate(Water.Company = paste(Water.Company, "Water", sep = " ")) 
     
     n_weeks <- floor(as.numeric(EDM_max_dt - EDM_min_dt, units = "weeks"))
     

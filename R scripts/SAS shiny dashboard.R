@@ -18,6 +18,7 @@ library(tmap)
 library(rnaturalearth)
 library(xlsx)
 library(showtext)
+library(ggplot2)
 sysfonts::font_add("HVDposter", "C:/Windows/Fonts/HVD Poster.ttf")  # adjust path if needed
 sysfonts::font_add("HVD_Poster_Clean", "C:/Windows/Fonts/HVD_Poster_Clean.ttf")  # adjust path if needed
 sysfonts::font_add("Roboto", "C:/Windows/Fonts/Roboto-VariableFont_wdth,wght.ttf")  # adjust path if needed
@@ -53,8 +54,11 @@ EDM_data <- EDM_raw_data %>%
   mutate(Start.DT = as.POSIXct(paste(Start.Date, Start.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
          End.DT = as.POSIXct(paste(End.Date, End.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
          across(c(Start.Date, End.Date), ~as.Date(.x, format = "%d/%m/%Y"))) %>% 
-  filter(!is.na(End.DT), !is.na(Start.DT))
-
+  filter(!is.na(End.DT), !is.na(Start.DT)) %>% 
+  mutate(duration = floor(difftime(End.DT, Start.DT, units = "hours")),
+         Event.Type2 = case_when(sign(duration) == -1 ~ "unaccounted",
+                                 TRUE ~ Event.Type))
+  
 #### data prep for apps####
 # for constituencies
 constituencies_exploded <- sf::st_cast(constituencies, "POLYGON")
@@ -64,7 +68,7 @@ EDM_sf <- sf::st_as_sf(EDM_data, crs = 4326, coords = c("lng", "lat")) %>%
   sf::st_join(constituencies[, c("PCON24NM", "geometry")]) %>% 
   mutate(PCON24NM = case_when(is.na(PCON24NM) ~
                                 constituencies_exploded$PCON24NM[sf::st_nearest_feature(geometry, constituencies_exploded)],
-                              TRUE ~ PCON24NM))
+                              TRUE ~ PCON24NM)) 
 
 CSO_sf <- sf::st_as_sf(CSO_data, crs = 4326, coords = c("Longitude", "Latitude")) %>% 
   sf::st_join(constituencies[, c("PCON24NM", "geometry")]) %>% 
@@ -101,22 +105,14 @@ generate_full_status <- function(df_site, min.DT, max.DT) {
     filter(!is.na(next_start) & End.DT < next_start) %>%
     bind_rows(., start_row) %>% 
     transmute(
-      # Water.Company = first(Water.Company),
       Start.DT = End.DT,
       End.DT = next_start,
       Event.Type = "none"
     )
   
-  # off_intervals <- off_intervals %>% 
-  #   filter()
-  
   # Combine original and "off" intervals
   df_site <- bind_rows(df_site, off_intervals) %>%
     arrange(Start.DT)
-  
-  # off_start_end <- df_site %>% 
-  #   mutate(next_start = min.DT) %>% 
-  #   filter(!is.na(next_start) & max.DT < next_start)
   
 }
 
@@ -129,7 +125,11 @@ EDM_full_status <- EDM_data %>%
                                       max.DT = EDM_max_dt)) %>%
   ungroup() 
 
-class(EDM_full_status)
+EDM_full_status <- EDM_full_status %>% 
+  mutate(duration = floor(difftime(End.DT, Start.DT, units = "hours")),
+         Event.Type2 = case_when(sign(duration) == -1 ~ "unaccounted",
+                                 TRUE ~ Event.Type))
 
 write.csv(EDM_full_status, here::here(project_root, "Outputs", "EDM_full_status"))
 EDM_full_status <- read.csv(here::here(project_root, "Outputs", "EDM_full_status"))
+
