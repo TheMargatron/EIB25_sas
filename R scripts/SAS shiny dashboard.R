@@ -17,10 +17,15 @@ library(leaflet)
 library(tmap)
 library(rnaturalearth)
 library(xlsx)
+library(showtext)
+sysfonts::font_add("HVDposter", "C:/Windows/Fonts/HVD Poster.ttf")  # adjust path if needed
+sysfonts::font_add("HVD_Poster_Clean", "C:/Windows/Fonts/HVD_Poster_Clean.ttf")  # adjust path if needed
+sysfonts::font_add("Roboto", "C:/Windows/Fonts/Roboto-VariableFont_wdth,wght.ttf")  # adjust path if needed
 # library(rsconnect)
 
 #### setup ####
 project_root <- dirname(here::here())
+showtext::showtext_auto()
 
 CSO_data <-
   xlsx::read.xlsx(
@@ -127,5 +132,4 @@ EDM_full_status <- EDM_data %>%
 class(EDM_full_status)
 
 write.csv(EDM_full_status, here::here(project_root, "Outputs", "EDM_full_status"))
-
-
+EDM_full_status <- read.csv(here::here(project_root, "Outputs", "EDM_full_status"))
