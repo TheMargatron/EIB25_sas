@@ -12,6 +12,7 @@ ordinal_suffix <- function(x){
   paste0(x, suffix)
 }
 
+# Convert date to formatted string for use in text
 date_in_text <- function(x){
   if(!lubridate::is.Date(x)) stop("Input must be date")
   text_date <- paste(format(x, "%B"),
@@ -20,3 +21,4 @@ date_in_text <- function(x){
   
   return(text_date)
 }
+
