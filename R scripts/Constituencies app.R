@@ -43,8 +43,9 @@ server_constituency <- function(input, output, session) {
   observeEvent(input$sasmap_shape_click, {
     clicked_id <- input$sasmap_shape_click$id
     
-    clicked_poly <- constituencies[constituencies$PCON24NM == clicked_id, ]
+    clicked_poly <- constituencies[constituencies$PCON24NM == clicked_id,]
     clicked_data <- EDM_sf[EDM_sf$PCON24NM == clicked_id,]
+    clicked_mp <- constituency_data[constituency_data$PCON24NM == clicked_id,]
     
     # 
     spill_data <- clicked_data %>%
@@ -82,7 +83,16 @@ server_constituency <- function(input, output, session) {
           stringr::str_flatten_comma(unique(spill_data$Water.Company), last = " and ")),
         MPs_email = paste("Send this to",
                           "YourLocalMP@email.com",
-                          sep = " ")
+                          sep = " "),
+        MPs_email = ifelse(!is.na(clicked_mp$MemberEmail), 
+                           paste("Send this to your local MP,",
+                                 clicked_mp$MemberName, 
+                                 "at",
+                                 clicked_mp$MemberEmail,
+                                 sep = " "),
+                           paste("We do not have and email address for your local MP,",
+                                 clicked_mp$MemberName,
+                                 sep = " "))
       )
     
     

@@ -1,9 +1,8 @@
 # =============================================================================
 # Title:        EIB25 Surfers Against Sewage Shiny dashboard
 # Description:  Shiny dashboard for EIB Grand Challenge
-# Author:       Margaret Bolton <mb804 (at) exeter.ac.uk>
+# Author:       Margaret Bolton 
 # Created:      2025-06-23
-# Last updated: 2025-06-27
 # Dependencies: shiny, leaflet, dplyr, sf
 # Inputs:       aggregated static data from water company APIs
 # Outputs:      Shiny app interface
@@ -34,8 +33,11 @@ EDM_raw_data <-
     here::here(project_root, "Data", "Sewage events 2025.csv")
   ) 
 
-constituencies <- sf::read_sf(dsn = here::here(project_root, "Data", "Constituencies_July_2024")) %>% 
-  st_transform(shape, crs = 4326)
+constituencies_raw <- sf::read_sf(dsn = here::here(project_root, "Data", "Constituencies_July_2024"))
+constituencies <- constituencies_raw %>% 
+  st_transform(shape, crs = 4326) %>% 
+  mutate(PCON24NM = case_when(str_detect(PCON24NM, "Glyndwr") ~ str_replace_all(PCON24NM, "Glyndwr", "Glyndŵr"),
+                              TRUE ~ PCON24NM))
 
 #### Prep the data generally ####
 EDM_data <- EDM_raw_data %>% 
