@@ -106,5 +106,6 @@ constituency_data <- constituency_data %>%
          MemberEmail = trimws(MemberEmail))
 
 
-write.csv(constituency_data, here::here(project_root, "Outputs", "MP_data"))
+write.csv(constituency_data, here::here(project_root, "Outputs", "MP_data.csv"))
 
+constituency_data <-read.csv(here::here(project_root, "Outputs", "MP_data.csv"))
