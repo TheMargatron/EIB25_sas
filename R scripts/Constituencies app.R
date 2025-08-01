@@ -171,7 +171,9 @@ server_constituency <- function(input, output, session) {
     output$summarystat <- renderText({
       if(!is.na("hello")){
         paste0("Since ",
-              as.Date(EDM_min_dt),
+              format(as.Date(EDM_min_dt), "%B"),
+              " ",
+              ordinal_suffix(as.numeric(format(as.Date(EDM_min_dt), "%d"))),
               " there have been ",
               summary_data$N_spills,
               " spills across ",
