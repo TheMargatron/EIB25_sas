@@ -1,6 +1,17 @@
 # MP data gathering functions
 
-# query the constituency API first so tidying can be done separately
+# get_constituency_data function
+# This function queries the UK Parliament API to get constituency data based on a search term.
+# It returns a list containing the constituency data.
+# 
+# Args:
+#   constituency: A string representing the constituency to search for.
+#
+# Returns:
+#   A list containing the constituency data, including the total results and items.
+#
+# Example:
+#   get_constituency_data("Birmingham")
 get_constituency_data <- function(constituency){
   res <- GET(
     url = "https://members-api.parliament.uk/api/Location/Constituency/Search",
@@ -9,10 +20,20 @@ get_constituency_data <- function(constituency){
   mp_data <- fromJSON(content(res, as = "text"), simplifyVector = FALSE)
   
   return(mp_data)
-  
 }
 
-# tidy up multiple matches or missing values and get member IDs and names
+# get_member_info function
+# This function extracts member information from a constituency JSON response.
+# It retrieves the member ID and name based on the constituency data.
+#
+# Args:
+#   constituency_json: A JSON object containing constituency data from the UK Parliament API.
+#
+# Returns:
+#   A list containing the member ID and name, or NULL if the constituency is missing.
+#
+# Example:
+#   get_member_info(constituency_json)
 # TODO: horrible to read
 get_member_info <- function(constituency_json){
   constituency <- constituency_json$resultContext
@@ -43,6 +64,18 @@ get_member_info <- function(constituency_json){
   return(list("mp_id" = mp_id, "mp_name" = mp_name))
 }
 
+# get_member_data function
+# This function retrieves member contact data from the UK Parliament API based on a member ID.
+# It returns a JSON object containing the member's contact information.
+#
+# Args:
+#   member_id: A string, or numeric value representing the member ID to query.
+#
+# Returns:
+#   A JSON object containing the member's contact information, including email addresses.
+# 
+# Example:
+#   get_member_data("1234")
 # get member emails from IDs first so checks and cleaning are done afterwards
 get_member_data <- function(member_id){
   res <- GET(

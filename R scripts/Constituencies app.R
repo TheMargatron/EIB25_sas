@@ -1,4 +1,12 @@
-#### Constituencies app ####
+# =============================================================================
+# Title:        Constituencies app
+# Description:  Shiny dashboard for SAS which displays constituencies on a map
+#               and provides information about sewage spills in those constituencies.
+# Author:       Margaret Bolton 
+# Dependencies: shiny, leaflet, dplyr, sf
+# Inputs:       aggregated static data from water company APIs
+# Outputs:      Shiny app interface
+# =============================================================================
 
 ui_constituency <- fluidPage(
   # titlePanel("This is a test"),
@@ -142,6 +150,7 @@ server_constituency <- function(input, output, session) {
     
     n_weeks <- floor(as.numeric(EDM_max_dt - EDM_min_dt, units = "weeks"))
     
+    # TODO: preprocess
     summary_data <- data.frame(
       N_spills  = nrow(spill_data),
       N_weeks   = floor(as.numeric(EDM_max_dt - EDM_min_dt, units = "weeks")),

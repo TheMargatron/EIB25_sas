@@ -1,6 +1,19 @@
 # Data processing
 
-# generate none status in between events
+# generate_full_status function
+# This function takes a data frame of site events and infers a complete set of intervals,
+# including "off" periods where no events are occurring.
+#
+# Args:
+#   df_site: A data frame containing site events with columns Start.DT, End.DT, and Event.Type.
+#   min.DT: The minimum date-time to consider for the start of the intervals.
+#   max.DT: The maximum date-time to consider for the end of the intervals.
+# 
+# Returns:
+#   A partially ordered data frame with complete intervals.
+# 
+# Example:
+#   generate_full_status(df_site, min.DT, max.DT)
 generate_full_status <- function(df_site, min.DT, max.DT) {
   # Ensure proper ordering
   df_site <- df_site %>% arrange(Start.DT)

@@ -1,4 +1,12 @@
-#### Sites app ####
+# =============================================================================
+# Title:        Constituencies app
+# Description:  Shiny dashboard for SAS which displays CSOs on a map
+#               and provides sewage spills data visualisations at those CSOs.
+# Author:       Margaret Bolton 
+# Dependencies: shiny, leaflet, dplyr, sf
+# Inputs:       aggregated static data from water company APIs
+# Outputs:      Shiny app interface
+# =============================================================================
 
 # Chose Positron for now, but ideally would use one which has blue sea
 # E.g. MapTiler Basic, but that requires API and limited usage
