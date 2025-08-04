@@ -60,7 +60,7 @@ EDM_data <- EDM_raw_data %>%
          End.DT = as.POSIXct(paste(End.Date, End.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
          across(c(Start.Date, End.Date), ~ as.Date(.x, format = "%d/%m/%Y"))) %>% 
   filter(!is.na(End.DT), !is.na(Start.DT)) %>% 
-  mutate(duration = floor(difftime(End.DT, Start.DT, units = "hours")),
+  mutate(duration = difftime(End.DT, Start.DT, units = "hours"),
          Event.Type2 = case_when(sign(duration) == -1 ~ "unaccounted",
                                  TRUE ~ Event.Type))
   
@@ -150,10 +150,10 @@ EDM_full_status <- EDM_data %>%
   ungroup() 
 
 EDM_full_status <- EDM_full_status %>% 
-  mutate(duration = floor(difftime(End.DT, Start.DT, units = "hours")),
+  mutate(duration = difftime(End.DT, Start.DT, units = "hours"),
          Event.Type2 = case_when(sign(duration) == -1 ~ "unaccounted",
                                  TRUE ~ Event.Type))
 
 write.csv(EDM_full_status, here::here(project_root, "Outputs", "EDM_full_status.csv"))
-EDM_full_status <- read.csv(here::here(project_root, "Outputs", "EDM_full_status.csv"))
+# EDM_full_status <- read.csv(here::here(project_root, "Outputs", "EDM_full_status.csv"))
 

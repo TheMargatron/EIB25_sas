@@ -159,8 +159,6 @@ server_constituency <- function(input, output, session) {
                   layerId = "highlighted",
                   group = "highlight")
     
-    print((summary_dates$Main_Start.Date))
-    
     # Describe summary stats
     output$summarytitle <- renderUI({
       h4(clicked_id)
@@ -193,7 +191,9 @@ server_constituency <- function(input, output, session) {
                     "</span>",
                     ". <br><br>That adds up to ",
                     "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
-                    clicked_poly$Hrs_spill,
+                    ifelse(clicked_poly$Hrs_spill < 1,
+                           clicked_poly$Hrs_spill,
+                           floor(clicked_poly$Hrs_spill)),
                     "</span>",
                     " hours of sewage outflow in the space of ",
                     ifelse(summary_dates$Main_duration < 1, 
