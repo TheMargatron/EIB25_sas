@@ -8,6 +8,9 @@
 # Outputs:      Shiny app interface
 # =============================================================================
 
+project_root <- dirname(here::here())
+source(here::here(project_root, "R scripts", "Accessory functions.R"))
+
 ui_constituency <- fluidPage(
   # titlePanel("This is a test"),
   # titlePanel(title = div(img(src= paste("SAS_Logo_Pack_Textured",
@@ -104,63 +107,41 @@ ui_constituency <- fluidPage(
 )
 
 server_constituency <- function(input, output, session) {
+  # load data
+  constituencies_sf <- sf::st_read(here::here(project_root, "Outputs", "constituency_sf.gpkg")) 
+  constituencies_sf <- constituencies_sf %>% 
+    mutate(across(c(Hrs_spill, Hrs_site), ~ as.difftime(.x, units = "hours")))
   
-  rv <- reactiveValues()
-  rv$selected <- NULL
+  summary_dates <- read.csv(here::here(project_root, "Outputs", "summary_dates.csv")) %>% 
+    mutate(Main_End.Date = as.Date(as.POSIXct(Main_End.Date, format = "%Y-%m-%d")),
+           Main_Start.Date = as.Date(as.POSIXct(Main_Start.Date, format = "%Y-%m-%d %H:%M:%OS")),
+           Main_duration = as.difftime(Main_duration, units = "weeks"))
+  
+  # Can't remember what these were for but don't seem to need them
+  # rv <- reactiveValues()
+  # rv$selected <- NULL
   
   # make the map
   output$sasmap <- renderLeaflet({
     leaflet() %>%
-      addProviderTiles("CartoDB.Positron") %>%
+      # addProviderTiles("CartoDB.Positron") %>%
+      addTiles() %>%
       setView(lng = -4.3, lat = 50.55, zoom = 8) %>%
-      # addMarkers(lng = -3.5, lat = 50.7, popup = "Exeter") %>% 
-      addPolygons(data = constituencies, color = "#58b7d4", weight = 1.5,
+      # addPolygons(data = constituencies, color = "#58b7d4", weight = 1.5,
+      addPolygons(data = constituencies_sf, color = "#dbdbda", weight = 1.5,
                   fillOpacity = 0.0,
+                  # fillColor = "blue",
                   opacity = 1,
                   popup = ~PCON24NM,
                   layerId = ~PCON24NM,
                   group = "base")
-    # addPolygons(data = constituencies, color = "blue", weight = 1,
-    #             fillColor = "blue",
-    #             fillOpacity = 0.5, 
-    #             popup = ~PCON24NM,
-    #             layerId = ~PCON24NM)
   })
-  
-  # start off unclicked
-  # clicked_constituency <- reactiveVal(NULL)
-  
-  # change to clicked if clicked
-  # observeEvent(input$sasmap_shape_click, {
-  #   clicked_constituency(input$sasmap_shape_click$id)
-  # })
   
   # highlight clicked polygon
   observeEvent(input$sasmap_shape_click, {
     clicked_id <- input$sasmap_shape_click$id
     
-    clicked_poly <- constituencies[constituencies$PCON24NM == clicked_id,]
-    clicked_data <- EDM_sf[EDM_sf$PCON24NM == clicked_id,]
-    clicked_mp <- constituency_data[constituency_data$PCON24NM == clicked_id,]
-    
-    # 
-    spill_data <- clicked_data %>%
-      filter(Event.Type2 == "spill") %>% 
-      mutate(Water.Company = paste(Water.Company, "Water", sep = " ")) 
-    
-    n_weeks <- floor(as.numeric(EDM_max_dt - EDM_min_dt, units = "weeks"))
-    
-    # TODO: preprocess
-    summary_data <- data.frame(
-      N_spills  = nrow(spill_data),
-      N_weeks   = floor(as.numeric(EDM_max_dt - EDM_min_dt, units = "weeks")),
-      Day_one   = as.Date(EDM_min_dt),
-      Hrs_spill = sum(spill_data$duration),
-      N_sites   = length(unique(clicked_data$Asset.ID)),
-      Companies = stringr::str_flatten_comma(unique(spill_data$Water.Company), last = " and "),
-      MP_email  = clicked_mp$MemberEmail,
-      Hrs_site  = sum(spill_data$duration)/length(unique(clicked_data$Asset.ID))
-    )
+    clicked_poly <- constituencies_sf[constituencies_sf$PCON24NM == clicked_id,]
     
     # Clear any previous highlight, then add new one
     leafletProxy("sasmap") %>%
@@ -176,50 +157,50 @@ server_constituency <- function(input, output, session) {
       h4(clicked_id)
     })
     
-    if(summary_data$N_sites == 0){
+    if(clicked_poly$N_sites == 0){
       output$summarystat <- renderText({
         "There are no reporting CSOs within this constituency."
       })
-    } else if(summary_data$Hrs_spill == 0){
+    } else if(clicked_poly$Hrs_spill == 0){
       output$summarystat <- renderText({
-        paste0("There have been no recorded sewage outflows in this constituency since",
-               date_in_text(as.Date(EDM_min_dt)))
+        paste0("There have been no recorded sewage outflows in this constituency since ",
+               date_in_text(summary_dates$Main_Start.Date))
       })
     } else {
       output$summarystat <- renderUI({
-          HTML(paste0("Since ",
-                 date_in_text(as.Date(EDM_min_dt)),
-                 " there have been ",
-                 "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
-                 summary_data$N_spills,
-                 "</span>",
-                 " spills across ",
-                 summary_data$N_sites,
-                 " sites in ",
-                 clicked_id,
-                 ", courtesy of ",
-                 "<span style='color:#ffdc32; font-size:20px; font-family:HVDPosterClean;'>",
-                 summary_data$Companies,
-                 "</span>",
-                 ". <br><br>That adds up to ",
-                 "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
-                 summary_data$Hrs_spill,
-                 "</span>",
-                 " hours of sewage outflow in the space of ",
-                 summary_data$N_weeks,
-                 " weeks. <br><br>",
-                 ifelse(clicked_mp$MemberEmail != "NULL", 
-                        paste0("Send these stats to ",
-                               clicked_mp$MemberName, 
-                               ", the local MP, at: ",
-                               "<span style='font-weight:bold'>",
-                               clicked_mp$MemberEmail,
-                               "</span>"
-                        ),
-                        paste0("We do not currently have an email address for the local MP, ",
-                               clicked_mp$MemberName))
-                 
-          )
+        HTML(paste0("Since ",
+                    date_in_text(summary_dates$Main_Start.Date),
+                    " there have been ",
+                    "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
+                    clicked_poly$N_spills,
+                    "</span>",
+                    " spills across ",
+                    clicked_poly$N_sites,
+                    " sites in ",
+                    clicked_id,
+                    ", courtesy of ",
+                    "<span style='color:#ffdc32; font-size:20px; font-family:HVDPosterClean;'>",
+                    clicked_poly$Companies,
+                    "</span>",
+                    ". <br><br>That adds up to ",
+                    "<span style='color:#f0515a; font-size:24px; font-family:HVDPosterClean;'>",
+                    clicked_poly$Hrs_spill,
+                    "</span>",
+                    " hours of sewage outflow in the space of ",
+                    summary_dates$Main_duration,
+                    " weeks. <br><br>",
+                    ifelse(clicked_poly$MemberEmail != "NULL", 
+                           paste0("Send these stats to ",
+                                  clicked_poly$MemberName, 
+                                  ", the local MP, at: ",
+                                  "<br><span style='font-weight:bold'>",
+                                  clicked_poly$MemberEmail,
+                                  "</span>"
+                           ),
+                           paste0("We do not currently have an email address for the local MP, ",
+                                  clicked_poly$MemberName))
+                    
+        )
         )
       })
     }
