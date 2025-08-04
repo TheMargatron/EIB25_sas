@@ -101,19 +101,72 @@ ui_constituency <- fluidPage(
     style="border-bottom: 2px solid #FFFFFF;"
   ),
   
+  # tab formatting
+  tags$head(
+    tags$style(HTML("
+    /* Tab text colour (unselected tabs) */
+    .nav-pills > li > a {
+      color: #b5b5b3;
+    }
+
+    /* Tab text on hover */
+    .nav-pills > li > a:hover {
+      color: #ffffff;
+    }
+    
+    /* Active tab */
+    .nav-pills {
+    --bs-nav-pills-link-active-bg: #2c3d52;
+    --bs-nav-pills-link-active-color: #ffffff;
+    }
+    
+  "))
+  ),
+  
   # layout
   fluidRow(
     id="maincontent",
-    column(width = 3, class = "col-sidebar", uiOutput("summarytitle"), uiOutput("summarystat")),
-    column(width = 9, class = "col-map", leafletOutput("sasmap",  width = "100%", height = "100%"))
+    # tab column
+    column(width = 4,
+           navlistPanel(well = FALSE,
+             id = "sidebar_tabs",
+             tabPanel("Summary",
+                      uiOutput("summarytitle"),
+                      # textOutput("info_text"),
+                      uiOutput("summarystat")
+             ),
+             tabPanel("Graphs",
+                      uiOutput("graphtitle"),
+                      uiOutput("graph"),
+                      uiOutput("dateslider")
+             # ),
+             # tabPanel("Details",
+             #          h4("Settings Tab"),
+             #          sliderInput("range", "Select Range", min = 1, max = 100, value = 50)
+             )
+           )
+    ),
+    # map column
+    # column(width = 4, class = "col-sidebar", uiOutput("summarytitle"), uiOutput("summarystat")),
+    column(width = 8, class = "col-map", leafletOutput("sasmap",  width = "100%", height = "100%"))
   )
-)
+  
 
+  
+  # fluidRow(
+  #   id="maincontent",
+  #   column(width = 4, class = "col-sidebar", uiOutput("summarytitle"), uiOutput("summarystat")),
+  #   column(width = 8, class = "col-map", leafletOutput("sasmap",  width = "100%", height = "100%"))
+  # )
+)
+  
 server_constituency <- function(input, output, session) {
   # load data
   constituencies_sf <- sf::st_read(here::here(project_root, "Outputs", "constituency_sf.gpkg"))
   constituencies_sf <- constituencies_sf %>%
     mutate(across(c(Hrs_spill, Hrs_site), ~ as.difftime(.x, units = "hours")))
+  
+  # EDM_data <- read.csv(here::here(project_root, "Outputs", ""))
   
   
   # TODO: fix dates
@@ -121,7 +174,6 @@ server_constituency <- function(input, output, session) {
     mutate(Main_Start.Date = as.Date(as.POSIXct(Main_Start.Date, format = "%Y-%m-%d")),
            Main_End.Date = as.Date(as.POSIXct(Main_End.Date, format = "%Y-%m-%d %H:%M:%OS")),
            Main_duration = as.difftime(Main_duration, units = "weeks"))
-  
   
   # Can't remember what these were for but don't seem to need them
   # rv <- reactiveValues()
@@ -154,14 +206,16 @@ server_constituency <- function(input, output, session) {
     leafletProxy("sasmap") %>%
       clearGroup("highlight") %>%
       addPolygons(data = clicked_poly,
-                  color = "#209fc5", weight = 3,
-                  fillColor = "#209fc5", fillOpacity = 0.6,
+                  color = "#f6f6f6", 
+                  opacity = 1,
+                  weight = 2,
+                  fillColor = "#1b6062", fillOpacity = 1,
                   layerId = "highlighted",
                   group = "highlight")
     
     # Describe summary stats
     output$summarytitle <- renderUI({
-      h4(clicked_id)
+      h4(paste0("summary: ", clicked_id))
     })
     
     if(clicked_poly$N_sites == 0){
@@ -217,6 +271,23 @@ server_constituency <- function(input, output, session) {
         )
       })
     }
+    
+    # date slider
+    output$dateslider <- renderUI({
+      # min_val <- min(summary_dates$Main_Start.Date, na.rm = TRUE)
+      # max_val <- max(summary_dates$Main_Start.Date, na.rm = TRUE)
+      
+      sliderInput("daterange", "Select date range", 
+                  min = summary_dates$Main_Start.Date, max = summary_dates$Main_End.Date,
+                  value = c(summary_dates$Main_Start.Date, summary_dates$Main_End.Date),
+                  timeFormat = "%Y-%m-%d"
+                  )
+    })
+    
+    # plot from date slider
+    output$graph <- renderText({ # change to renderplot when needed
+      paste0("Min first date is: ", input$daterange[1])
+    })
     
   })
   
