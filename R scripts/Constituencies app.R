@@ -10,6 +10,9 @@
 
 project_root <- dirname(here::here())
 source(here::here(project_root, "R scripts", "Accessory functions.R"))
+cloropleth_palette <- colorNumeric(palette = cloro_colour, 
+                                   domain = constituencies_sf$Hrs_site_week, 
+                                   na.color = "#dbdbda")
 
 ui_constituency <- fluidPage(
   # titlePanel("This is a test"),
@@ -108,14 +111,17 @@ ui_constituency <- fluidPage(
 
 server_constituency <- function(input, output, session) {
   # load data
-  constituencies_sf <- sf::st_read(here::here(project_root, "Outputs", "constituency_sf.gpkg")) 
-  constituencies_sf <- constituencies_sf %>% 
+  constituencies_sf <- sf::st_read(here::here(project_root, "Outputs", "constituency_sf.gpkg"))
+  constituencies_sf <- constituencies_sf %>%
     mutate(across(c(Hrs_spill, Hrs_site), ~ as.difftime(.x, units = "hours")))
   
+  
+  # TODO: fix dates
   summary_dates <- read.csv(here::here(project_root, "Outputs", "summary_dates.csv")) %>% 
-    mutate(Main_End.Date = as.Date(as.POSIXct(Main_End.Date, format = "%Y-%m-%d")),
-           Main_Start.Date = as.Date(as.POSIXct(Main_Start.Date, format = "%Y-%m-%d %H:%M:%OS")),
+    mutate(Main_Start.Date = as.Date(as.POSIXct(Main_Start.Date, format = "%Y-%m-%d")),
+           Main_End.Date = as.Date(as.POSIXct(Main_End.Date, format = "%Y-%m-%d %H:%M:%OS")),
            Main_duration = as.difftime(Main_duration, units = "weeks"))
+  
   
   # Can't remember what these were for but don't seem to need them
   # rv <- reactiveValues()
@@ -128,9 +134,10 @@ server_constituency <- function(input, output, session) {
       addTiles() %>%
       setView(lng = -4.3, lat = 50.55, zoom = 8) %>%
       # addPolygons(data = constituencies, color = "#58b7d4", weight = 1.5,
-      addPolygons(data = constituencies_sf, color = "#dbdbda", weight = 1.5,
-                  fillOpacity = 0.0,
-                  # fillColor = "blue",
+      addPolygons(data = constituencies_sf, color = "#1b6062", weight = 1.5,
+                  fillOpacity = 0.7,
+                  fillColor = ~cloropleth_palette(Hrs_site_week),
+                  
                   opacity = 1,
                   popup = ~PCON24NM,
                   layerId = ~PCON24NM,
@@ -151,6 +158,8 @@ server_constituency <- function(input, output, session) {
                   fillColor = "#209fc5", fillOpacity = 0.6,
                   layerId = "highlighted",
                   group = "highlight")
+    
+    print((summary_dates$Main_Start.Date))
     
     # Describe summary stats
     output$summarytitle <- renderUI({
@@ -187,8 +196,12 @@ server_constituency <- function(input, output, session) {
                     clicked_poly$Hrs_spill,
                     "</span>",
                     " hours of sewage outflow in the space of ",
-                    summary_dates$Main_duration,
-                    " weeks. <br><br>",
+                    ifelse(summary_dates$Main_duration < 1, 
+                           "less than a week.",
+                           paste0(summary_dates$Main_duration,
+                                  " weeks. <br><br>")),
+                    # summary_dates$Main_duration,
+                    # " weeks. <br><br>",
                     ifelse(clicked_poly$MemberEmail != "NULL", 
                            paste0("Send these stats to ",
                                   clicked_poly$MemberName, 

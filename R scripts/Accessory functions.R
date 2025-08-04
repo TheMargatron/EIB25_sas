@@ -43,3 +43,31 @@ date_in_text <- function(x){
   return(text_date)
 }
 
+# cloro_colour function 
+# Generates custom colour palette for cloropleth maps
+# For use with colorNumeric
+#
+# Args:
+#   x: A numeric vector of values to map to colours
+#   threshold: A numeric value to determine the maximum for the colour ramp
+#
+# Returns:
+#   A character vector of colours corresponding to the input values
+#
+# Example:
+#   cloro_colour(c(0, 0.5, 1))
+#   # [1] "#23b99e" "#f0515a" "#f0515a"
+cloro_colour <- function(x, threshold = 0.5) {
+  ramp <- colorRamp(c("#ffdc32", "#f0515a"))
+  sapply(x, function(val) {
+    if (is.na(val)) {
+      return("#dbdbda") 
+    } else if (val == 0) {
+      return("#23b99e")
+    } else if (val > threshold) {
+      return("#f0515a") 
+    } else {
+      rgb(ramp(val / threshold)/255)
+    }
+  })
+}

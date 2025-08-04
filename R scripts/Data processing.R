@@ -58,7 +58,7 @@ EDM_data <- EDM_raw_data %>%
   rename(lng = Longitude, lat = Latitude) %>% 
   mutate(Start.DT = as.POSIXct(paste(Start.Date, Start.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
          End.DT = as.POSIXct(paste(End.Date, End.Time, sep = " "), format = "%d/%m/%Y %H:%M"),
-         across(c(Start.Date, End.Date), ~as.Date(.x, format = "%d/%m/%Y"))) %>% 
+         across(c(Start.Date, End.Date), ~ as.Date(.x, format = "%d/%m/%Y"))) %>% 
   filter(!is.na(End.DT), !is.na(Start.DT)) %>% 
   mutate(duration = floor(difftime(End.DT, Start.DT, units = "hours")),
          Event.Type2 = case_when(sign(duration) == -1 ~ "unaccounted",
@@ -82,6 +82,18 @@ CSO_sf <- sf::st_as_sf(CSO_data, crs = 4326, coords = c("Longitude", "Latitude")
                                 constituencies_exploded$PCON24NM[sf::st_nearest_feature(geometry, constituencies_exploded)],
                               TRUE ~ PCON24NM),
          PCON24NM = factor(PCON24NM, levels = unique(constituencies_sf$PCON24NM)))
+
+##### Basic date info #####
+EDM_min_dt <- min(EDM_data$Start.DT)
+EDM_max_dt <- max(EDM_data$End.DT)
+EDM_wks_dt <- difftime(EDM_max_dt, EDM_min_dt, units = "weeks")
+
+# TODO: will not need to be saved when date and duration is a user input, see issue #12
+summary_dates <- data.frame(Main_End.Date = EDM_max_dt,
+                            Main_Start.Date = EDM_min_dt,
+                            Main_duration = EDM_wks_dt)
+
+write.csv(summary_dates, here::here(project_root, "Outputs", "summary_dates.csv"))
 
 ##### summarise data for constituencies app ####
 
@@ -114,27 +126,21 @@ constituencies_sf <- constituencies_sf %>%
   left_join(EDM_summary, by = join_by(PCON24NM), 
             relationship = "one-to-one",
             unmatched = "error") %>% 
-  mutate(Hrs_site = Hrs_spill/N_sites)
+  mutate(Hrs_site = Hrs_spill/N_sites,
+         Hrs_site_week = Hrs_site/as.numeric(summary_dates$Main_duration))
+
 
 constituencies_sf <- constituencies_sf %>%
   mutate(across(where(is.difftime), ~as.numeric(.x, units = "hours")))
 
+# constituencies_sf <- constituencies_sf %>% 
+  # mutate(cloropleth_fill = case_when(Hrs_site == 0  ~ NA_real_,
+                                      # TRUE ~ Hrs_site))
+
 sf::st_write(constituencies_sf, here::here(project_root, "Outputs", "constituency_sf.gpkg"),
              delete_dsn = TRUE)
 
-
 ##### Intervals for sites app #####
-EDM_min_dt <- min(EDM_data$Start.DT)
-EDM_max_dt <- max(EDM_data$End.DT)
-EDM_wks_dt <- floor(difftime(EDM_max_dt, EDM_min_dt, units = "weeks"))
-
-# TODO: will not need to be saved when date and duration is a user input, see issue #12
-summary_dates <- data.frame(Main_End.Date = EDM_max_dt,
-                            Main_Start.Date = EDM_min_dt,
-                            Main_duration = EDM_wks_dt)
-
-write.csv(summary_dates, here::here(project_root, "Outputs", "summary_dates.csv"))
-
 # generate status in between events
 EDM_full_status <- EDM_data %>%
   group_by(Asset.ID) %>%
