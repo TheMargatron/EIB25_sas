@@ -44,3 +44,59 @@ generate_full_status <- function(df_site, min.DT, max.DT) {
   # Combine original and "off" intervals
   df_site <- bind_rows(df_site, off_intervals) 
 }
+
+# generate_fake_data
+# fake EDM data for testing plots in shiny without too much overhead
+# 
+# Args:
+#   df: A data frame containing the original EDM data.
+#   n_records_per_asset: Number of fake records to generate per asset.
+#
+# Returns:
+#   A data frame with fake data for each asset, including start and end dates.
+#   Start and end dates are adjusted to fit within the specified date range.
+#
+# Example:
+#   generate_fake_data(df, n_records_per_asset = 5)
+generate_fake_data <- function(df, n_records_per_asset = 5) {
+  
+  # Get unique Asset.IDs from your dataframe
+  unique_assets <- unique(df$Asset.ID)
+  
+  # Date range
+  start_date <- EDM_min_dt
+  end_date <- EDM_max_dt
+  origin_rows <- data.frame(
+    Asset.ID = unique_assets,
+    Start.DT = start_date,
+    Event.Type2 = factor("unaccounted", levels = c("spill", "none", "maintenance", "unaccounted"))
+  )
+  
+  # Generate fake data
+  fake_data <- map_dfr(unique_assets, function(asset_id) {
+    
+    # Generate random datetimes
+    random_seconds <- runif(n_records_per_asset, 
+                            min = as.numeric(start_date), 
+                            max = as.numeric(end_date))
+    
+    
+    data.frame(
+      Asset.ID = asset_id,
+      Start.DT = as.POSIXct(random_seconds, origin = "1970-01-01"),
+      Event.Type2 = factor(sample(c("spill", "none", "maintenance"), 
+                                  n_records_per_asset, 
+                                  replace = TRUE,
+                                  prob = c(0.2, 0.6, 0.2)),
+                           levels = c("spill", "none", "maintenance", "unaccounted"))
+    ) %>% 
+      bind_rows(., origin_rows[origin_rows$Asset.ID == asset_id,]) %>% 
+      arrange(Start.DT) %>% 
+      mutate(End.DT = lead(Start.DT),
+             End.DT = case_when(is.na(End.DT) ~ end_date,
+                                TRUE ~ End.DT))
+    
+  }) 
+  
+  return(fake_data)
+}

@@ -76,6 +76,8 @@ EDM_sf <- sf::st_as_sf(EDM_data, crs = 4326, coords = c("lng", "lat")) %>%
                               TRUE ~ PCON24NM),
          PCON24NM = factor(PCON24NM, levels = unique(constituencies_sf$PCON24NM))) 
 
+save_with_difftime(EDM_sf, savename = "EDM_sf.gpkg")
+
 CSO_sf <- sf::st_as_sf(CSO_data, crs = 4326, coords = c("Longitude", "Latitude")) %>% 
   sf::st_join(constituencies_sf[, c("PCON24NM", "geometry")]) %>% 
   mutate(PCON24NM = case_when(is.na(PCON24NM) ~
@@ -157,3 +159,10 @@ EDM_full_status <- EDM_full_status %>%
 write.csv(EDM_full_status, here::here(project_root, "Outputs", "EDM_full_status.csv"))
 # EDM_full_status <- read.csv(here::here(project_root, "Outputs", "EDM_full_status.csv"))
 
+##### Generate fake data for testing #####
+EDM_fake_data <- CSO_sf %>% 
+  sf::st_drop_geometry() %>% 
+  select(Asset.ID, Water.Company, PCON24NM) %>% 
+  right_join(generate_fake_data(CSO_data), join_by(Asset.ID))
+
+write.csv(EDM_fake_data, here::here(project_root, "Outputs", "EDM_fake_data.csv"))
