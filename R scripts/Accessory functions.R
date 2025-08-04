@@ -71,3 +71,22 @@ cloro_colour <- function(x, threshold = 0.5) {
     }
   })
 }
+
+# save_with_difftime function
+# Save sf objects with difftime columns as numeric values with units
+#
+# Args:
+#   x: An sf object with difftime columns
+#   savename: A string for the output file name
+#   units: A string specifying the units for the difftime conversion (default is "hours")
+#
+# Returns:
+#   Saves the sf object to a specified file path with difftime columns converted to numeric
+save_with_difftime <- function(x, savename, units = "hours"){
+  x <- x %>%
+    mutate(across(where(is.difftime), ~as.numeric(.x, units = units)))
+  
+  sf::st_write(x, here::here(project_root, "Outputs", savename),
+               delete_dsn = TRUE)
+}
+
