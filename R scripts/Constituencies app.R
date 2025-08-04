@@ -15,15 +15,6 @@ cloropleth_palette <- colorNumeric(palette = cloro_colour,
                                    na.color = "#dbdbda")
 
 ui_constituency <- fluidPage(
-  # titlePanel("This is a test"),
-  # titlePanel(title = div(img(src= paste("SAS_Logo_Pack_Textured",
-  #                                     "SAS_Logo_Pack_Textured",
-  #                                     "RGB", "Tab",
-  #                                     "Practical Exclusion",
-  #                                     "Mono RGB",
-  #                                     "SAS-Texture-Tab-Practical-Mono-White-RGB.svg",
-  #                                     sep = "/"),
-  #                            height="60px"), "Constituencies map")),
   # fonts and formatting
   # colours
   tags$head(tags$style('body {color:#FFFFFF;}')),
@@ -137,8 +128,8 @@ ui_constituency <- fluidPage(
              ),
              tabPanel("Graphs",
                       uiOutput("graphtitle"),
-                      uiOutput("graph"),
-                      uiOutput("dateslider")
+                      uiOutput("dateslider"),
+                      plotOutput("graph")
              # ),
              # tabPanel("Details",
              #          h4("Settings Tab"),
@@ -166,8 +157,10 @@ server_constituency <- function(input, output, session) {
   constituencies_sf <- constituencies_sf %>%
     mutate(across(c(Hrs_spill, Hrs_site), ~ as.difftime(.x, units = "hours")))
   
-  # EDM_data <- read.csv(here::here(project_root, "Outputs", ""))
-  
+  EDM_fake_data <- read.csv(here::here(project_root, "Outputs", "EDM_fake_data.csv"))
+  # using fake data for now because real data is too big
+  # EDM_sf <- sf::st_read(here::here(project_root, "Outputs", "EDM_sf.gpkg")) %>% 
+  #   mutate(across(c(duration), ~ as.difftime(.x, units = "hours")))
   
   # TODO: fix dates
   summary_dates <- read.csv(here::here(project_root, "Outputs", "summary_dates.csv")) %>% 
@@ -175,17 +168,12 @@ server_constituency <- function(input, output, session) {
            Main_End.Date = as.Date(as.POSIXct(Main_End.Date, format = "%Y-%m-%d %H:%M:%OS")),
            Main_duration = as.difftime(Main_duration, units = "weeks"))
   
-  # Can't remember what these were for but don't seem to need them
-  # rv <- reactiveValues()
-  # rv$selected <- NULL
-  
   # make the map
   output$sasmap <- renderLeaflet({
     leaflet() %>%
       # addProviderTiles("CartoDB.Positron") %>%
       addTiles() %>%
       setView(lng = -4.3, lat = 50.55, zoom = 8) %>%
-      # addPolygons(data = constituencies, color = "#58b7d4", weight = 1.5,
       addPolygons(data = constituencies_sf, color = "#1b6062", weight = 1.5,
                   fillOpacity = 0.7,
                   fillColor = ~cloropleth_palette(Hrs_site_week),
@@ -196,11 +184,14 @@ server_constituency <- function(input, output, session) {
                   group = "base")
   })
   
+  # record clicked constituency for highlighting and data filtering
+  clicked_id <- reactiveVal()
+  
   # highlight clicked polygon
   observeEvent(input$sasmap_shape_click, {
-    clicked_id <- input$sasmap_shape_click$id
+    clicked_id(input$sasmap_shape_click$id)
     
-    clicked_poly <- constituencies_sf[constituencies_sf$PCON24NM == clicked_id,]
+    clicked_poly <- constituencies_sf[constituencies_sf$PCON24NM == clicked_id(),]
     
     # Clear any previous highlight, then add new one
     leafletProxy("sasmap") %>%
@@ -215,7 +206,7 @@ server_constituency <- function(input, output, session) {
     
     # Describe summary stats
     output$summarytitle <- renderUI({
-      h4(paste0("summary: ", clicked_id))
+      h4(paste0("summary: ", clicked_id()))
     })
     
     if(clicked_poly$N_sites == 0){
@@ -238,7 +229,7 @@ server_constituency <- function(input, output, session) {
                     " spills across ",
                     clicked_poly$N_sites,
                     " sites in ",
-                    clicked_id,
+                    clicked_id(),
                     ", courtesy of ",
                     "<span style='color:#ffdc32; font-size:20px; font-family:HVDPosterClean;'>",
                     clicked_poly$Companies,
@@ -272,23 +263,70 @@ server_constituency <- function(input, output, session) {
       })
     }
     
-    # date slider
-    output$dateslider <- renderUI({
-      # min_val <- min(summary_dates$Main_Start.Date, na.rm = TRUE)
-      # max_val <- max(summary_dates$Main_Start.Date, na.rm = TRUE)
-      
-      sliderInput("daterange", "Select date range", 
-                  min = summary_dates$Main_Start.Date, max = summary_dates$Main_End.Date,
-                  value = c(summary_dates$Main_Start.Date, summary_dates$Main_End.Date),
-                  timeFormat = "%Y-%m-%d"
-                  )
-    })
+  })
+  
+  # make the graph
+  output$graphtitle <- renderUI({
+    h4(paste0("Graph: ", clicked_id()))
+  })
+  output$dateslider <- renderUI({
+    # min_val <- min(summary_dates$Main_Start.Date, na.rm = TRUE)
+    # max_val <- max(summary_dates$Main_Start.Date, na.rm = TRUE)
     
-    # plot from date slider
-    output$graph <- renderText({ # change to renderplot when needed
-      paste0("Min first date is: ", input$daterange[1])
-    })
+    sliderInput("daterange", "Select date range", 
+                min = summary_dates$Main_Start.Date, max = summary_dates$Main_End.Date,
+                value = c(summary_dates$Main_Start.Date, summary_dates$Main_End.Date),
+                timeFormat = "%Y-%m-%d"
+    )
+  })
+  
+  # spill_date_data <- EDM_fake_data %>% 
+  # filter(Event.Type == "spill")
+  
+  
+  # plot from date slider
+  # output$graph <- renderPlot({ # change to renderplot when needed
+  #   ggplot(spill_date_data, aes(x=))
+  #   paste0("Min first date is: ", input$daterange[1])
+  # })
+  
+  # new bit
+  # filtered_data <- reactive({
+  #   req(clicked_id(), input$daterange)
+  #   EDM_fake_data %>%
+  #     filter(PCON24NM == clicked_id()) %>%
+  #     filter(Start.DT >= input$daterange[1], Start.DT <= input$daterange[2])
+  # })
+  
+  # output$graph <- renderText({
+  #   paste0("Test, min start: ",
+  #          # min(filtered_data$Start.DT),
+  #          "Hello")
+  # })
+  
+  
+  filtered_data <- reactive({
+    req(clicked_id(), input$daterange)
     
+    min_date <- as.POSIXct(input$daterange[1], format = "%Y-%m-%d")
+    max_date <- as.POSIXct(input$daterange[2], format = "%Y-%m-%d")
+    
+    EDM_fake_data %>%
+      filter(PCON24NM == clicked_id()) %>%
+      filter(Start.DT < max_date,
+             End.DT > min_date) %>% 
+      mutate(Start.DT = case_when(Start.DT < min_date ~ as.POSIXct(min_date),
+                                  TRUE ~ as.POSIXct(Start.DT)),
+             End.DT = case_when(End.DT > max_date ~ as.POSIXct(max_date),
+                                TRUE ~ as.POSIXct(End.DT)))
+  })
+  
+  output$graph <- renderPlot({
+    df <- filtered_data()
+    req(nrow(df) > 0)
+    
+    ggplot(df, aes(x = Start.DT, y = End.DT)) +
+      geom_point() 
   })
   
 }
